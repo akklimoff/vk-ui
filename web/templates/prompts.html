@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block body %}
+<form class="card" method="get">
+  Персона: <b>{{v.persona_name}}</b> ·
+  <label>Собеседник (личка): <select name="user" onchange="this.form.submit()">
+    <option value="">— беседа —</option>
+    {% for k in user_keys %}<option value="{{k}}" {{'selected' if k==v.user_key}}>{{k}}</option>{% endfor %}
+  </select></label>
+</form>
+{% for title, text in v.layers %}<div class="card"><h3>[{{title}}]</h3><pre>{{text}}</pre></div>{% endfor %}
+<details><summary>Целиком, как видит модель ({{v.message|length}} символов)</summary><pre>{{v.message}}</pre></details>
+{% endblock %}

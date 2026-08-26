@@ -9,7 +9,8 @@ from fastapi.templating import Jinja2Templates
 from bot.config import Settings
 from web.auth import make_guard
 from bot.personas import list_personas, load_persona
-from web.services import load_runtime_dict, save_persona, save_runtime_patch, status_view
+from web.services import (access_raw, load_runtime_dict, prompt_view, save_persona,
+                          save_runtime_patch, status_view)
 
 HERE = os.path.dirname(__file__)
 
@@ -67,6 +68,13 @@ def create_app(settings: Settings) -> FastAPI:
             raise HTTPException(404)
         save_persona(settings.personas_dir, slug, name, prompt)
         return RedirectResponse("/personas", status_code=303)
+
+    @app.get("/prompts")
+    def prompts_page(request: Request, user: str | None = None):
+        view = prompt_view(settings, user or None)
+        keys = sorted((access_raw(settings.access_file).get("user_prompts") or {}).keys())
+        return templates.TemplateResponse(request, "prompts.html",
+            {"v": view, "user_keys": keys, "page": "prompts"})
 
     return app
 
