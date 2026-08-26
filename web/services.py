@@ -1,6 +1,8 @@
+import os
 from dataclasses import dataclass
 
-from bot.status import read_json
+from bot.personas import persona_path, render_persona
+from bot.status import read_json, write_json_atomic
 
 CONNECTED_WITHIN = 90.0
 
@@ -36,3 +38,23 @@ def status_view(state_dir: str, now: float) -> StatusView:
         last_event_ago=ago(last_event), last_reply_ago=ago(d.get("last_reply_at")),
         started_at=d.get("started_at"),
     )
+
+
+
+def load_runtime_dict(path: str) -> dict:
+    return read_json(path, {})
+
+
+def save_runtime_patch(path: str, **fields) -> None:
+    data = load_runtime_dict(path)
+    data.update(fields)
+    write_json_atomic(path, data)
+
+
+def save_persona(personas_dir: str, slug: str, name: str, prompt: str) -> None:
+    path = persona_path(personas_dir, slug)
+    os.makedirs(personas_dir, exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(render_persona(name, prompt))
+    os.replace(tmp, path)

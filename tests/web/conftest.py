@@ -22,4 +22,4 @@ def settings(tmp_path):
 
 @pytest.fixture
 def client(settings):
-    return TestClient(create_app(settings))
+    return TestClient(create_app(settings), follow_redirects=False)
