@@ -1,7 +1,8 @@
 import os
 from dataclasses import dataclass
 
-from bot.access import join_lines, parse_access
+from bot.access import AccessFile, join_lines, parse_access, private_prompts
+from bot.context import build_context
 from bot.llm import PERSONA_LAYER, PRIVATE_LAYER, SYSTEM_LAYER, USER_LAYER, compose_system_message
 from bot.personas import load_persona, persona_path, render_persona
 from bot.status import read_json, write_json_atomic
@@ -122,3 +123,24 @@ def access_form_values(path: str) -> dict:
     values["private_prompt"] = join_lines(raw.get("private_prompt"))
     values["user_prompts"] = "\n".join(f"{k}: {join_lines(v)}" for k, v in (raw.get("user_prompts") or {}).items())
     return values
+
+
+GROUP_CHAT_PEER_BASE = 2_000_000_000
+
+
+def sandbox_reply(settings, llm, vk, *, persona_slug: str, conversation: str, peer_id: int | None,
+                  count: int, asker: str, temperature: float) -> tuple[str, str]:
+    persona = load_persona(settings.personas_dir, persona_slug) if persona_slug else None
+    persona_prompt = persona.prompt if persona else settings.persona_prompt
+    is_private, private_prompt, user_prompt = False, "", ""
+    if peer_id is not None:
+        history = vk.history(peer_id, count)
+        conversation = build_context(history, vk.resolve_name, settings.message_char_limit,
+                                     settings.context_char_budget, vk.me_id)
+        is_private = peer_id < GROUP_CHAT_PEER_BASE
+        if is_private:
+            lists = AccessFile(settings.access_file, vk.resolve_screen_names).current()
+            private_prompt, user_prompt = private_prompts(lists, peer_id)
+    reply = llm.reply(conversation, asker, is_private=is_private, private_prompt=private_prompt,
+                      user_prompt=user_prompt, persona_prompt=persona_prompt, temperature=temperature)
+    return conversation, reply

@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block body %}
+<form method="post" class="card">
+  <p><label>Персона <select name="persona">
+    <option value="">по умолчанию</option>
+    {% for p in personas %}<option value="{{p.slug}}" {{'selected' if p.slug==active}}>{{p.name}}</option>{% endfor %}
+  </select></label>
+  <label>Температура <input name="temperature" value="{{form.temperature if form else '0.8'}}" size="4"></label>
+  <label>Кто спрашивает <input name="asker" value="{{form.asker if form else 'Собеседник'}}"></label></p>
+  <p><label>Из VK: peer_id <input name="peer_id" value="{{form.peer_id if form else ''}}" size="12"></label>
+     <label>последних сообщений <input name="count" value="{{form.count if form else '40'}}" size="4"></label>
+     <span class="muted">— или вставь диалог ниже (строки «Имя: текст», свои реплики — «Ты: …»)</span></p>
+  <p><textarea name="conversation">{{form.conversation if form else ''}}</textarea></p>
+  <button>Ответить (без отправки)</button>
+</form>
+{% if result is not none %}
+<div class="card"><h3>Ответ</h3><p>{{result}}</p></div>
+<details><summary>Контекст, ушедший в модель</summary><pre>{{context}}</pre></details>
+{% endif %}
+{% endblock %}

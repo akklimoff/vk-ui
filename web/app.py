@@ -8,22 +8,36 @@ from fastapi.templating import Jinja2Templates
 
 from bot.config import Settings, parse_ids
 from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
-from bot.status import write_json_atomic
+from bot.llm import LlmClient
+from bot.status import ReplyLog, write_json_atomic
+from bot.vk import VkClient
 from web.auth import make_guard
 from bot.personas import list_personas, load_persona
 from web.services import (access_form_values, access_raw, load_runtime_dict, parse_access_form,
-                          prompt_view, save_persona, save_runtime_patch, status_view)
+                          prompt_view, sandbox_reply, save_persona, save_runtime_patch, status_view)
 
 HERE = os.path.dirname(__file__)
 
 
-def create_app(settings: Settings) -> FastAPI:
+def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -> FastAPI:
     if not settings.web_password:
         raise RuntimeError("WEB_PASSWORD не задан")
     guard = make_guard(settings.web_password)
     app = FastAPI(dependencies=[Depends(guard)])
     app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
     templates = Jinja2Templates(directory=os.path.join(HERE, "templates"))
+    app.state.vk = None
+    app.state.llm = None
+
+    def vk():
+        if app.state.vk is None:
+            app.state.vk = vk_factory(settings.vk_token)
+        return app.state.vk
+
+    def llm():
+        if app.state.llm is None:
+            app.state.llm = llm_factory(settings)
+        return app.state.llm
 
     @app.get("/")
     def status_page(request: Request):
@@ -117,6 +131,43 @@ def create_app(settings: Settings) -> FastAPI:
             raise HTTPException(400, str(e))
         write_json_atomic(settings.access_file, data)
         return RedirectResponse("/access", status_code=303)
+
+    @app.get("/replies")
+    def replies_page(request: Request):
+        records = ReplyLog(f"{settings.state_dir}/replies.jsonl").read()
+        return templates.TemplateResponse(request, "replies.html", {"records": records, "page": "replies"})
+
+    @app.post("/replies/{reply_message_id}/delete")
+    def delete_reply(reply_message_id: int):
+        vk().delete_message(reply_message_id)
+        return RedirectResponse("/replies", status_code=303)
+
+    def sandbox_ctx(**extra):
+        active = load_runtime_dict(settings.runtime_file).get("active_persona", "")
+        return {"personas": list_personas(settings.personas_dir), "active": active,
+                "page": "sandbox", "result": None, "context": "", "form": None, **extra}
+
+    @app.get("/sandbox")
+    def sandbox_page(request: Request):
+        return templates.TemplateResponse(request, "sandbox.html", sandbox_ctx())
+
+    @app.post("/sandbox")
+    def sandbox_run(request: Request, persona: str = Form(""), conversation: str = Form(""),
+                    peer_id: str = Form(""), count: str = Form("40"), asker: str = Form("Собеседник"),
+                    temperature: str = Form("0.8")):
+        try:
+            pid = int(peer_id) if peer_id.strip() else None
+            temp = float(temperature)
+            n = int(count)
+        except ValueError:
+            raise HTTPException(400, "peer_id, count и temperature должны быть числами")
+        context, reply = sandbox_reply(settings, llm(), vk() if pid is not None else None,
+                                       persona_slug=persona, conversation=conversation, peer_id=pid,
+                                       count=n, asker=asker, temperature=temp)
+        return templates.TemplateResponse(request, "sandbox.html",
+            sandbox_ctx(result=reply, context=context, active=persona, form={
+                "conversation": conversation, "peer_id": peer_id, "count": count,
+                "asker": asker, "temperature": temperature}))
 
     return app
 
