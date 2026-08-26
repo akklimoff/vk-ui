@@ -6,7 +6,9 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from bot.config import Settings
+from bot.config import Settings, parse_ids
+from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
+from bot.status import write_json_atomic
 from web.auth import make_guard
 from bot.personas import list_personas, load_persona
 from web.services import (access_raw, load_runtime_dict, prompt_view, save_persona,
@@ -75,6 +77,31 @@ def create_app(settings: Settings) -> FastAPI:
         keys = sorted((access_raw(settings.access_file).get("user_prompts") or {}).keys())
         return templates.TemplateResponse(request, "prompts.html",
             {"v": view, "user_keys": keys, "page": "prompts"})
+
+    @app.get("/settings")
+    def settings_page(request: Request):
+        rt = parse_runtime(load_runtime_dict(settings.runtime_file), runtime_defaults(settings))
+        return templates.TemplateResponse(request, "settings.html", {"rt": rt, "page": "settings"})
+
+    @app.post("/settings")
+    def save_settings(temperature: str = Form(), reply_delay_min: str = Form(), reply_delay_max: str = Form(),
+                      context_messages: str = Form(), paused_peers: str = Form("")):
+        current = load_runtime_dict(settings.runtime_file)
+        try:
+            rt = parse_runtime({**current, "temperature": temperature, "reply_delay_min": reply_delay_min,
+                                "reply_delay_max": reply_delay_max, "context_messages": context_messages,
+                                "paused_peers": sorted(parse_ids(paused_peers))},
+                               runtime_defaults(settings))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        write_json_atomic(settings.runtime_file, {**current, **dump_runtime(rt)})
+        return RedirectResponse("/settings", status_code=303)
+
+    @app.post("/settings/pause")
+    def toggle_pause():
+        current = load_runtime_dict(settings.runtime_file)
+        save_runtime_patch(settings.runtime_file, paused=not bool(current.get("paused")))
+        return RedirectResponse("/", status_code=303)
 
     return app
 

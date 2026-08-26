@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block body %}
+<form method="post" class="card">
+  <p><label>Температура <input name="temperature" value="{{rt.temperature}}" size="5"></label></p>
+  <p><label>Задержка ответа, с: от <input name="reply_delay_min" value="{{rt.reply_delay_min}}" size="4"></label>
+     <label>до <input name="reply_delay_max" value="{{rt.reply_delay_max}}" size="4"></label></p>
+  <p><label>Сообщений контекста <input name="context_messages" value="{{rt.context_messages}}" size="5"></label></p>
+  <p><label>Чаты на паузе (peer_id через запятую) <input name="paused_peers" value="{{rt.paused_peers|sort|join(', ')}}" size="40"></label></p>
+  <button>Сохранить</button>
+  <p class="muted">Лимиты частоты ответов задаются в .env и требуют перезапуска.</p>
+</form>
+{% endblock %}
