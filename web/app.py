@@ -11,8 +11,8 @@ from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
 from bot.status import write_json_atomic
 from web.auth import make_guard
 from bot.personas import list_personas, load_persona
-from web.services import (access_raw, load_runtime_dict, prompt_view, save_persona,
-                          save_runtime_patch, status_view)
+from web.services import (access_form_values, access_raw, load_runtime_dict, parse_access_form,
+                          prompt_view, save_persona, save_runtime_patch, status_view)
 
 HERE = os.path.dirname(__file__)
 
@@ -102,6 +102,21 @@ def create_app(settings: Settings) -> FastAPI:
         current = load_runtime_dict(settings.runtime_file)
         save_runtime_patch(settings.runtime_file, paused=not bool(current.get("paused")))
         return RedirectResponse("/", status_code=303)
+
+    @app.get("/access")
+    def access_page(request: Request):
+        return templates.TemplateResponse(request, "access.html",
+            {"v": access_form_values(settings.access_file), "page": "access"})
+
+    @app.post("/access")
+    async def save_access(request: Request):
+        form = {k: v for k, v in (await request.form()).items()}
+        try:
+            data = parse_access_form(form)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        write_json_atomic(settings.access_file, data)
+        return RedirectResponse("/access", status_code=303)
 
     return app
 

@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 
-from bot.access import join_lines
+from bot.access import join_lines, parse_access
 from bot.llm import PERSONA_LAYER, PRIVATE_LAYER, SYSTEM_LAYER, USER_LAYER, compose_system_message
 from bot.personas import load_persona, persona_path, render_persona
 from bot.status import read_json, write_json_atomic
@@ -90,3 +90,35 @@ def prompt_view(settings, user_key: str | None) -> PromptView:
         message=compose_system_message(settings.system_prompt, user_prompt, private_prompt, persona_prompt),
         layers=[(t, x.strip()) for t, x in layers if x.strip()],
     )
+
+
+ACCESS_LIST_FIELDS = ("blocked_users", "blocked_peers", "allowed_peers", "auto_reply_users")
+
+
+def _lines(text: str) -> list[str]:
+    return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+
+
+def parse_access_form(form: dict) -> dict:
+    user_prompts = {}
+    for line in _lines(form.get("user_prompts", "")):
+        key, sep, value = line.partition(":")
+        if not sep or not key.strip():
+            raise ValueError(f"Строка user_prompts без «ник: текст»: {line!r}")
+        user_prompts[key.strip()] = value.strip()
+    data = {field: _lines(form.get(field, "")) for field in ACCESS_LIST_FIELDS}
+    data["private_prompt"] = _lines(form.get("private_prompt", ""))
+    data["user_prompts"] = user_prompts
+    try:
+        parse_access(data, resolve_screen_names=lambda names: frozenset())
+    except Exception as e:
+        raise ValueError(f"Некорректные значения: {e}") from e
+    return data
+
+
+def access_form_values(path: str) -> dict:
+    raw = access_raw(path)
+    values = {field: "\n".join(str(x) for x in raw.get(field) or []) for field in ACCESS_LIST_FIELDS}
+    values["private_prompt"] = join_lines(raw.get("private_prompt"))
+    values["user_prompts"] = "\n".join(f"{k}: {join_lines(v)}" for k, v in (raw.get("user_prompts") or {}).items())
+    return values

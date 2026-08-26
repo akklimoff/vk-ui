@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block body %}
+<form method="post" class="card">
+  {% for field, title in [("blocked_users","Заблокированные пользователи (id или @ник, по одному в строке)"),
+                           ("blocked_peers","Заблокированные чаты (peer_id)"),
+                           ("allowed_peers","Белый список чатов (пусто — все)"),
+                           ("auto_reply_users","Автоответ в личке (id или @ник)")] %}
+  <p><label>{{title}}<br><textarea name="{{field}}" style="min-height:5rem">{{v[field]}}</textarea></label></p>
+  {% endfor %}
+  <p><label>private_prompt (личка, общий)<br><textarea name="private_prompt">{{v.private_prompt}}</textarea></label></p>
+  <p><label>user_prompts — «@ник: текст», по одному в строке<br><textarea name="user_prompts">{{v.user_prompts}}</textarea></label></p>
+  <button>Сохранить</button>
+</form>
+{% endblock %}
