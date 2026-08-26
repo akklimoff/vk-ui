@@ -175,7 +175,9 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
 def main() -> None:
     import uvicorn
 
-    uvicorn.run(create_app(Settings()), host="0.0.0.0", port=8080)
+    # порт наружу не публикуется, до uvicorn доходит только Caddy — его X-Forwarded-For можно доверять
+    uvicorn.run(create_app(Settings()), host="0.0.0.0", port=8080,
+                proxy_headers=True, forwarded_allow_ips="*")
 
 
 if __name__ == "__main__":
