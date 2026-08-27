@@ -4,7 +4,8 @@
                            ("blocked_peers","Заблокированные чаты (peer_id)"),
                            ("allowed_peers","Белый список чатов (пусто — все)"),
                            ("auto_reply_users","Автоответ в личке (id или @ник)"),
-                           ("auto_reply_peers","Беседы, где бот отвечает всем без тега (peer_id)")] %}
+                           ("auto_reply_peers","Беседы, где бот отвечает всем без тега (peer_id)"),
+                           ("onboarding_peers","Беседы со знакомством новичков (peer_id)")] %}
   <p><label>{{title}}<br><textarea name="{{field}}" style="min-height:5rem">{{v[field]}}</textarea></label></p>
   {% endfor %}
   <p><label>private_prompt (личка, общий)<br><textarea name="private_prompt">{{v.private_prompt}}</textarea></label></p>

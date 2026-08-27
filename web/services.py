@@ -23,10 +23,14 @@ class StatusView:
     last_event_ago: float | None
     last_reply_ago: float | None
     started_at: float | None
+    interviews: list[tuple[int, int, int]]
 
 
 def status_view(state_dir: str, now: float) -> StatusView:
     d = read_json(f"{state_dir}/status.json", {})
+    interviews = [(int(peer), int(user), int(iv.get("asked", 0)))
+                  for peer, users in read_json(f"{state_dir}/onboarding.json", {}).items()
+                  for user, iv in users.items() if not iv.get("done")]
 
     def ago(ts):
         return None if ts is None else round(now - ts, 1)
@@ -39,7 +43,7 @@ def status_view(state_dir: str, now: float) -> StatusView:
         active_persona=d.get("active_persona", ""), paused=bool(d.get("paused")),
         errors_last_hour=int(d.get("errors_last_hour", 0)),
         last_event_ago=ago(last_event), last_reply_ago=ago(d.get("last_reply_at")),
-        started_at=d.get("started_at"),
+        started_at=d.get("started_at"), interviews=interviews,
     )
 
 
@@ -93,7 +97,8 @@ def prompt_view(settings, user_key: str | None) -> PromptView:
     )
 
 
-ACCESS_LIST_FIELDS = ("blocked_users", "blocked_peers", "allowed_peers", "auto_reply_users", "auto_reply_peers")
+ACCESS_LIST_FIELDS = ("blocked_users", "blocked_peers", "allowed_peers", "auto_reply_users",
+                      "auto_reply_peers", "onboarding_peers")
 
 
 def _lines(text: str) -> list[str]:
@@ -148,7 +153,7 @@ def sandbox_reply(settings, llm, vk, *, persona_slug: str, conversation: str, pe
         is_private = peer_id < GROUP_CHAT_PEER_BASE
         lists = AccessFile(settings.access_file, vk.resolve_screen_names).current()
         general_prompt, specific_prompt = scoped_prompts(lists, peer_id, is_private)
-        auto_chat = peer_id in lists.auto_reply_peers
+        auto_chat = peer_id in lists.auto_reply_peers or peer_id in lists.onboarding_peers
     reply = llm.reply(conversation, asker, is_private=is_private, private_prompt=general_prompt,
                       user_prompt=specific_prompt, persona_prompt=persona_prompt,
                       temperature=temperature, auto_chat=auto_chat)
