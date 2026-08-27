@@ -99,12 +99,13 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
 
     @app.post("/settings")
     def save_settings(temperature: str = Form(), reply_delay_min: str = Form(), reply_delay_max: str = Form(),
-                      context_messages: str = Form(), paused_peers: str = Form("")):
+                      context_messages: str = Form(), dm_debounce_seconds: str = Form(),
+                      paused_peers: str = Form("")):
         current = load_runtime_dict(settings.runtime_file)
         try:
             rt = parse_runtime({**current, "temperature": temperature, "reply_delay_min": reply_delay_min,
                                 "reply_delay_max": reply_delay_max, "context_messages": context_messages,
-                                "paused_peers": sorted(parse_ids(paused_peers))},
+                                "dm_debounce_seconds": dm_debounce_seconds, "paused_peers": sorted(parse_ids(paused_peers))},
                                runtime_defaults(settings))
         except ValueError as e:
             raise HTTPException(400, str(e))

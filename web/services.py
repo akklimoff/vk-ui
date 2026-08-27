@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 
-from bot.access import AccessFile, join_lines, parse_access, private_prompts
+from bot.access import AccessFile, join_lines, parse_access, scoped_prompts
 from bot.context import build_context
 from bot.llm import PERSONA_LAYER, PRIVATE_LAYER, SYSTEM_LAYER, USER_LAYER, compose_system_message
 from bot.personas import load_persona, persona_path, render_persona
@@ -93,23 +93,29 @@ def prompt_view(settings, user_key: str | None) -> PromptView:
     )
 
 
-ACCESS_LIST_FIELDS = ("blocked_users", "blocked_peers", "allowed_peers", "auto_reply_users")
+ACCESS_LIST_FIELDS = ("blocked_users", "blocked_peers", "allowed_peers", "auto_reply_users", "auto_reply_peers")
 
 
 def _lines(text: str) -> list[str]:
     return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
 
 
-def parse_access_form(form: dict) -> dict:
-    user_prompts = {}
-    for line in _lines(form.get("user_prompts", "")):
+def _keyed_prompts(field: str, text: str) -> dict:
+    prompts = {}
+    for line in _lines(text):
         key, sep, value = line.partition(":")
         if not sep or not key.strip():
-            raise ValueError(f"Строка user_prompts без «ник: текст»: {line!r}")
-        user_prompts[key.strip()] = value.strip()
+            raise ValueError(f"Строка {field} без «ключ: текст»: {line!r}")
+        prompts[key.strip()] = value.strip()
+    return prompts
+
+
+def parse_access_form(form: dict) -> dict:
     data = {field: _lines(form.get(field, "")) for field in ACCESS_LIST_FIELDS}
     data["private_prompt"] = _lines(form.get("private_prompt", ""))
-    data["user_prompts"] = user_prompts
+    data["user_prompts"] = _keyed_prompts("user_prompts", form.get("user_prompts", ""))
+    data["chat_prompt"] = _lines(form.get("chat_prompt", ""))
+    data["peer_prompts"] = _keyed_prompts("peer_prompts", form.get("peer_prompts", ""))
     try:
         parse_access(data, resolve_screen_names=lambda names: frozenset())
     except Exception as e:
@@ -122,6 +128,8 @@ def access_form_values(path: str) -> dict:
     values = {field: "\n".join(str(x) for x in raw.get(field) or []) for field in ACCESS_LIST_FIELDS}
     values["private_prompt"] = join_lines(raw.get("private_prompt"))
     values["user_prompts"] = "\n".join(f"{k}: {join_lines(v)}" for k, v in (raw.get("user_prompts") or {}).items())
+    values["chat_prompt"] = join_lines(raw.get("chat_prompt"))
+    values["peer_prompts"] = "\n".join(f"{k}: {join_lines(v)}" for k, v in (raw.get("peer_prompts") or {}).items())
     return values
 
 
@@ -132,15 +140,16 @@ def sandbox_reply(settings, llm, vk, *, persona_slug: str, conversation: str, pe
                   count: int, asker: str, temperature: float) -> tuple[str, str]:
     persona = load_persona(settings.personas_dir, persona_slug) if persona_slug else None
     persona_prompt = persona.prompt if persona else settings.persona_prompt
-    is_private, private_prompt, user_prompt = False, "", ""
+    is_private, auto_chat, general_prompt, specific_prompt = False, False, "", ""
     if peer_id is not None:
         history = vk.history(peer_id, count)
         conversation = build_context(history, vk.resolve_name, settings.message_char_limit,
                                      settings.context_char_budget, vk.me_id)
         is_private = peer_id < GROUP_CHAT_PEER_BASE
-        if is_private:
-            lists = AccessFile(settings.access_file, vk.resolve_screen_names).current()
-            private_prompt, user_prompt = private_prompts(lists, peer_id)
-    reply = llm.reply(conversation, asker, is_private=is_private, private_prompt=private_prompt,
-                      user_prompt=user_prompt, persona_prompt=persona_prompt, temperature=temperature)
+        lists = AccessFile(settings.access_file, vk.resolve_screen_names).current()
+        general_prompt, specific_prompt = scoped_prompts(lists, peer_id, is_private)
+        auto_chat = peer_id in lists.auto_reply_peers
+    reply = llm.reply(conversation, asker, is_private=is_private, private_prompt=general_prompt,
+                      user_prompt=specific_prompt, persona_prompt=persona_prompt,
+                      temperature=temperature, auto_chat=auto_chat)
     return conversation, reply
