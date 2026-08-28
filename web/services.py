@@ -121,6 +121,9 @@ def parse_access_form(form: dict) -> dict:
     data["user_prompts"] = _keyed_prompts("user_prompts", form.get("user_prompts", ""))
     data["chat_prompt"] = _lines(form.get("chat_prompt", ""))
     data["peer_prompts"] = _keyed_prompts("peer_prompts", form.get("peer_prompts", ""))
+    data["peer_blocked_users"] = {k: v.replace(",", " ").split()
+                                  for k, v in _keyed_prompts("peer_blocked_users",
+                                                             form.get("peer_blocked_users", "")).items()}
     try:
         parse_access(data, resolve_screen_names=lambda names: frozenset())
     except Exception as e:
@@ -135,6 +138,8 @@ def access_form_values(path: str) -> dict:
     values["user_prompts"] = "\n".join(f"{k}: {join_lines(v)}" for k, v in (raw.get("user_prompts") or {}).items())
     values["chat_prompt"] = join_lines(raw.get("chat_prompt"))
     values["peer_prompts"] = "\n".join(f"{k}: {join_lines(v)}" for k, v in (raw.get("peer_prompts") or {}).items())
+    values["peer_blocked_users"] = "\n".join(f"{k}: {' '.join(str(x) for x in v or [])}"
+                                              for k, v in (raw.get("peer_blocked_users") or {}).items())
     return values
 
 
