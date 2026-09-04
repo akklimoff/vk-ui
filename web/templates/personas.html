@@ -1,10 +1,4 @@
 {% extends "base.html" %}{% block body %}
-<p><a href="/personas/new">+ новая персона</a></p>
-{% for p in personas %}<div class="card">
-  <b>{{p.name}}</b> <span class="muted">{{p.slug}}</span>
-  {% if p.slug == active %}<span class="ok">— активна</span>{% else %}
-  <form method="post" action="/personas/{{p.slug}}/activate" style="display:inline"><button>Активировать</button></form>{% endif %}
-  <a href="/personas/{{p.slug}}/edit">редактировать</a>
-  <p class="muted">{{p.prompt[:200]}}…</p>
-</div>{% else %}<p class="muted">Персон нет — бот использует PERSONA_PROMPT из окружения.</p>{% endfor %}
+<p><a href="/personas/new" role="button" class="outline">+ Новая персона</a></p>
+{% include "partials/personas.html" %}
 {% endblock %}

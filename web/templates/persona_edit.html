@@ -1,8 +1,1 @@
-{% extends "base.html" %}{% block body %}
-<form method="post" action="{{ '/personas/' + persona.slug if persona else '/personas' }}" class="card">
-  {% if not persona %}<p><label>slug (a-z, 0-9, -, _): <input name="slug" pattern="[a-z0-9_-]{1,40}" required></label></p>{% endif %}
-  <p><label>Имя: <input name="name" value="{{persona.name if persona else ''}}" required></label></p>
-  <p><textarea name="prompt" required>{{persona.prompt if persona else ''}}</textarea></p>
-  <button>Сохранить</button> <a href="/personas">отмена</a>
-</form>
-{% endblock %}
+{% extends "base.html" %}{% block body %}{% include "partials/persona_edit.html" %}{% endblock %}

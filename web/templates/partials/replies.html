@@ -1,0 +1,22 @@
+{% if not embedded %}{% with oob = true %}{% include "partials/replies_poll.html" %}{% endwith %}
+{% if records %}<p id="feed-empty" class="muted" hx-swap-oob="true" hidden>Ответов ещё нет.</p>{% endif %}{% endif %}
+{% for r in records %}<article x-data="{ ask: false }">
+  <header class="muted">
+    <span>{{ (now - r.ts)|ago }}</span> · <span data-ts="{{ r.ts }}" x-text="localTime($el.dataset.ts)"></span>
+    · <a href="{{ r.peer_id|peer_link }}">{{ r.peer_id|peer_label }}</a>
+    · от <a href="https://vk.com/id{{ r.from_id }}">id{{ r.from_id }}</a>
+    · {{ r.latency_s }} с · {{ r.persona or "по умолчанию" }}
+    {% if r.rewritten %}<span class="badge">переписан</span>{% endif %}
+  </header>
+  {% if r.tag %}<p class="muted">→ {{ r.tag }}</p>{% endif %}
+  <p class="reply-text">{{ r.reply }}</p>
+  <footer class="row">
+    <button type="button" class="outline secondary" x-show="!ask" @click="ask = true">Удалить в VK</button>
+    <span class="row" x-show="ask" x-cloak>
+      <span>Удалить сообщение в VK?</span>
+      <button type="button" hx-post="/replies/{{ r.reply_message_id }}/delete" hx-target="closest article" hx-swap="delete"
+              hx-disabled-elt="this">Да</button>
+      <button type="button" class="outline secondary" @click="ask = false">Нет</button>
+    </span>
+  </footer>
+</article>{% endfor %}

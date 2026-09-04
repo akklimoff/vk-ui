@@ -1,10 +1,1 @@
-{% extends "base.html" %}{% block body %}
-<div class="card">
-  <h2>{% if s.connected %}<span class="ok">● подключён</span>{% else %}<span class="bad">● не подключён</span>{% endif %}
-  {% if s.paused %}<span class="muted">(на паузе)</span>{% endif %}</h2>
-  <p>Аккаунт: <b>{{s.me_name}}</b> (id {{s.me_id}}) · {{s.provider}} / {{s.model}} · персона: <b>{{s.active_persona or "по умолчанию"}}</b></p>
-  <p>Последнее событие: {{s.last_event_ago if s.last_event_ago is not none else "—"}} с назад · последний ответ: {{s.last_reply_ago if s.last_reply_ago is not none else "—"}} с назад · ошибок за час: {{s.errors_last_hour}}</p>
-  {% if s.interviews %}<p>На знакомстве: {% for peer, user, asked in s.interviews %}<a href="https://vk.com/id{{user}}">id{{user}}</a> в {{peer}} ({{asked}} вопр.){{ ", " if not loop.last }}{% endfor %}</p>{% endif %}
-  <form method="post" action="/settings/pause"><button>{{ "Возобновить" if s.paused else "Пауза" }}</button></form>
-</div>
-{% endblock %}
+{% extends "base.html" %}{% block body %}{% include "partials/status.html" %}{% endblock %}

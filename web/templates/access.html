@@ -1,18 +1,1 @@
-{% extends "base.html" %}{% block body %}
-<form method="post" class="card">
-  {% for field, title in [("blocked_users","Заблокированные пользователи (id или @ник, по одному в строке)"),
-                           ("blocked_peers","Заблокированные чаты (peer_id)"),
-                           ("allowed_peers","Белый список чатов (пусто — все)"),
-                           ("auto_reply_users","Автоответ в личке (id или @ник)"),
-                           ("auto_reply_peers","Беседы, где бот отвечает всем без тега (peer_id)"),
-                           ("onboarding_peers","Беседы со знакомством новичков (peer_id)")] %}
-  <p><label>{{title}}<br><textarea name="{{field}}" style="min-height:5rem">{{v[field]}}</textarea></label></p>
-  {% endfor %}
-  <p><label>private_prompt (личка, общий)<br><textarea name="private_prompt">{{v.private_prompt}}</textarea></label></p>
-  <p><label>user_prompts — «@ник: текст», по одному в строке<br><textarea name="user_prompts">{{v.user_prompts}}</textarea></label></p>
-  <p><label>chat_prompt (беседы с автоответом, общий)<br><textarea name="chat_prompt">{{v.chat_prompt}}</textarea></label></p>
-  <p><label>peer_blocked_users — кого игнорировать в конкретной беседе (например, админов): «peer_id: @ник id …», по одной беседе в строке<br><textarea name="peer_blocked_users">{{v.peer_blocked_users}}</textarea></label></p>
-  <p><label>peer_prompts — «peer_id: текст», по одному в строке<br><textarea name="peer_prompts">{{v.peer_prompts}}</textarea></label></p>
-  <button>Сохранить</button>
-</form>
-{% endblock %}
+{% extends "base.html" %}{% block body %}{% include "partials/access.html" %}{% endblock %}

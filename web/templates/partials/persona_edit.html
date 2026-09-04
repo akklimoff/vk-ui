@@ -1,0 +1,16 @@
+<form id="persona-form" method="post" action="{{ '/personas/' + persona.slug if persona else '/personas' }}"
+      hx-post="{{ '/personas/' + persona.slug if persona else '/personas' }}" hx-target="#persona-form" hx-swap="outerHTML">
+  <article>
+    <header><b>{{ persona.name if persona else "Новая персона" }}</b>{% if persona %} <span class="muted">{{ persona.slug }}</span>{% endif %}</header>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if not persona %}<label>slug <small>латиница, цифры, «-», «_»</small>
+      <input name="slug" value="{{ form.slug }}" pattern="[a-z0-9_-]{1,40}" autocapitalize="off" autocorrect="off" required></label>{% endif %}
+    <label>Имя <input name="name" value="{{ persona.name if persona else form.name }}" required></label>
+    <label x-data="editor">Промпт <small><span x-text="n"></span> символов</small>
+      <textarea name="prompt" class="mono" x-ref="t" @input="input()" required>{{ persona.prompt if persona else form.prompt }}</textarea></label>
+    <footer class="sticky-actions row">
+      <button>Сохранить</button>
+      <a href="/personas" role="button" class="outline secondary">К списку</a>
+    </footer>
+  </article>
+</form>

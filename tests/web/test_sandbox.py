@@ -52,3 +52,31 @@ def test_sandbox_from_peer_uses_history(client):
     assert r.status_code == 200
     conv, _, kw = client.app.state.llm.calls[-1]
     assert "Вася: привет" in conv and kw["is_private"] is False
+
+
+HX = {"HX-Request": "true"}
+
+
+def test_sandbox_hx_returns_result_partial_only(client):
+    r = client.post("/sandbox", data={"persona": "v", "conversation": "Вася: привет", "peer_id": "",
+                                      "count": "40", "asker": "Вася", "temperature": "0.8"}, auth=AUTH, headers=HX)
+    assert r.status_code == 200 and "<html" not in r.text and "<form" not in r.text
+    assert 'id="sandbox-result"' in r.text and "ответ из песочницы" in r.text and "Вася: привет" in r.text
+
+
+def test_sandbox_hx_bad_number_returns_422_error(client):
+    r = client.post("/sandbox", data={"persona": "v", "conversation": "x", "peer_id": "",
+                                      "count": "many", "asker": "Вася", "temperature": "0.8"}, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and 'class="error"' in r.text and client.app.state.llm is None
+
+
+def test_sandbox_llm_failure_returns_422_with_reason_and_hides_secrets(settings):
+    class BrokenLlm(FakeLlm):
+        def reply(self, conversation, asker, **kw):
+            raise RuntimeError("timeout, key k")
+
+    client = TestClient(create_app(settings, vk_factory=FakeVk, llm_factory=BrokenLlm), follow_redirects=False)
+    data = {"persona": "", "conversation": "x", "peer_id": "", "count": "1", "asker": "a", "temperature": "0.5"}
+    r = client.post("/sandbox", data=data, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and "timeout" in r.text and "key k" not in r.text and "[скрыто]" in r.text
+    assert client.post("/sandbox", data=data, auth=AUTH).status_code == 400

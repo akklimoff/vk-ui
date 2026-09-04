@@ -1,0 +1,11 @@
+<div id="layers">
+  {% for title, text in v.layers %}<details {{ 'open' if loop.first }}>
+    <summary><b>[{{ title }}]</b> <span class="muted">{{ text|length }} симв.</span></summary>
+    <pre>{{ text }}</pre>
+  </details>{% endfor %}
+  <details x-data>
+    <summary><b>Целиком, как видит модель</b> <span class="muted">{{ v.message|length }} симв.</span></summary>
+    <button type="button" class="outline secondary" @click="navigator.clipboard.writeText($refs.full.textContent).then(() => toast('Скопировано')).catch(() => toast('Не удалось скопировать', 'bad'))">Скопировать</button>
+    <pre x-ref="full">{{ v.message }}</pre>
+  </details>
+</div>

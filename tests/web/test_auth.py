@@ -27,3 +27,10 @@ def test_too_many_wrong_passwords_return_429(client):
         assert client.get("/", auth=("x", "wrong")).status_code == 401
     assert client.get("/", auth=("x", "wrong")).status_code == 429
     assert client.get("/", auth=AUTH).status_code == 429
+
+
+def test_cross_site_post_is_rejected(client):
+    r = client.post("/settings/pause", auth=AUTH, headers={"Sec-Fetch-Site": "cross-site"})
+    assert r.status_code == 403
+    assert client.post("/settings/pause", auth=AUTH, headers={"Sec-Fetch-Site": "same-origin"}).status_code == 303
+    assert client.get("/", auth=AUTH, headers={"Sec-Fetch-Site": "cross-site"}).status_code == 200

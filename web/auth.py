@@ -36,6 +36,9 @@ def make_guard(password: str, limiter: LoginLimiter | None = None):
     limiter = limiter or LoginLimiter()
 
     def guard(request: Request, creds: HTTPBasicCredentials = Depends(_basic)) -> None:
+        # браузер сам прикладывает Basic Auth к чужим form-POST'ам — отсекаем их по Sec-Fetch-Site
+        if request.method != "GET" and request.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Запрос с чужого сайта")
         ip = request.client.host if request.client else "?"
         if limiter.blocked(ip):
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много неверных попыток, подожди")

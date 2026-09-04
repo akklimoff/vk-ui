@@ -1,0 +1,23 @@
+<form id="settings-form" method="post" action="/settings" hx-post="/settings" hx-target="#settings-form" hx-swap="outerHTML">
+  <article>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <div class="grid">
+      <label>Температура <small>0 — предсказуемо, 1 — креативно</small>
+        <input name="temperature" value="{{ form.temperature }}" type="text" inputmode="decimal" required></label>
+      <label>Сообщений контекста
+        <input name="context_messages" value="{{ form.context_messages }}" type="text" inputmode="numeric" required></label>
+    </div>
+    <div class="grid">
+      <label>Задержка ответа от, с
+        <input name="reply_delay_min" value="{{ form.reply_delay_min }}" type="text" inputmode="decimal" required></label>
+      <label>Задержка ответа до, с
+        <input name="reply_delay_max" value="{{ form.reply_delay_max }}" type="text" inputmode="decimal" required></label>
+    </div>
+    <label>Пауза перед ответом в личке, с <small>0 — отвечать сразу, иначе ждём тишины и отвечаем одним сообщением</small>
+      <input name="dm_debounce_seconds" value="{{ form.dm_debounce_seconds }}" type="text" inputmode="decimal" required></label>
+    <label>Чаты на паузе <small>peer_id через запятую</small>
+      <input name="paused_peers" value="{{ form.paused_peers }}" type="text" inputmode="numeric"></label>
+    <p class="muted">Лимиты частоты ответов задаются в .env и требуют перезапуска.</p>
+    <footer class="sticky-actions"><button>Сохранить</button></footer>
+  </article>
+</form>

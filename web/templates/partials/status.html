@@ -1,0 +1,19 @@
+<article id="status" hx-get="/" hx-trigger="every 5s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+  <header class="row">
+    {% if s.connected %}<span class="badge ok">● подключён</span>{% else %}<span class="badge bad">● не подключён</span>{% endif %}
+    {% if s.paused %}<span class="badge">на паузе</span>{% endif %}
+    <span class="muted">{{ s.me_name or "—" }}{% if s.me_id %} · <a href="https://vk.com/id{{ s.me_id }}">id{{ s.me_id }}</a>{% endif %}</span>
+  </header>
+  <div class="stats">
+    <div class="stat"><small>персона</small><b>{{ s.active_persona or "по умолчанию" }}</b></div>
+    <div class="stat"><small>модель</small><b>{{ s.provider or "—" }}</b> <span class="muted">{{ s.model }}</span></div>
+    <div class="stat"><small>последнее событие</small><b>{{ s.last_event_ago|ago }}</b></div>
+    <div class="stat"><small>последний ответ</small><b>{{ s.last_reply_ago|ago }}</b></div>
+    <div class="stat"><small>ошибок за час</small><b class="{{ 'bad' if s.errors_last_hour }}">{{ s.errors_last_hour }}</b></div>
+    <div class="stat"><small>аптайм</small><b>{{ s.uptime|duration }}</b></div>
+  </div>
+  {% if s.interviews %}<p class="muted">На знакомстве: {% for peer, user, asked in s.interviews %}<a href="https://vk.com/id{{ user }}">id{{ user }}</a> в {{ peer|peer_label }} ({{ asked }} вопр.){{ ", " if not loop.last }}{% endfor %}</p>{% endif %}
+  <form method="post" action="/settings/pause" hx-post="/settings/pause" hx-target="#status" hx-swap="outerHTML">
+    <button class="{{ 'contrast' if s.paused else 'secondary' }}">{{ "Возобновить" if s.paused else "Поставить на паузу" }}</button>
+  </form>
+</article>

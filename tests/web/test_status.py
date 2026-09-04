@@ -22,3 +22,31 @@ def test_status_view_connected_by_recent_event(settings):
 def test_status_page_without_state_shows_offline(client):
     r = client.get("/", auth=AUTH)
     assert r.status_code == 200 and "не подключён" in r.text
+
+
+def test_status_view_uptime_from_started_at(settings):
+    write_json_atomic(f"{settings.state_dir}/status.json", {"started_at": 900.0, "last_event_at": 1000.0})
+    assert status_view(settings.state_dir, now=1050.0).uptime == 150.0
+    assert status_view(settings.state_dir, now=1050.0).connected
+
+
+def test_status_hx_returns_partial_only(client):
+    r = client.get("/", auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200 and "<html" not in r.text and 'id="status"' in r.text
+
+
+def test_pause_toggle_hx_returns_status_partial_with_toast(client):
+    r = client.post("/settings/pause", auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200 and 'id="status"' in r.text and "<html" not in r.text
+    assert "на паузе" in r.text and "toast" in r.headers["HX-Trigger"]
+
+
+def test_status_view_takes_pause_and_persona_from_runtime(settings):
+    write_json_atomic(f"{settings.state_dir}/status.json", {"paused": False, "active_persona": "old"})
+    v = status_view(settings.state_dir, now=1.0, runtime={"paused": True, "active_persona": "new"})
+    assert v.paused and v.active_persona == "new"
+
+
+def test_status_page_labels_interview_chat(client, settings):
+    write_json_atomic(f"{settings.state_dir}/onboarding.json", {"2000000001": {"558": {"asked": 1}}})
+    assert "беседа 1" in client.get("/", auth=AUTH).text

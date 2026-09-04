@@ -1,0 +1,11 @@
+<div id="sandbox-result">
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if result is not none %}<article>
+    <header><b>Ответ</b></header>
+    <p class="reply-text">{{ result }}</p>
+    <details>
+      <summary>Контекст, ушедший в модель <span class="muted">{{ context|length }} симв.</span></summary>
+      <pre>{{ context }}</pre>
+    </details>
+  </article>{% endif %}
+</div>

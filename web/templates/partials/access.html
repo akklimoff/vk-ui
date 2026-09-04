@@ -1,0 +1,31 @@
+<form id="access-form" method="post" action="/access" hx-post="/access" hx-target="#access-form" hx-swap="outerHTML">
+  <article>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <details open>
+      <summary><b>Списки</b> <span class="muted">кто и где</span></summary>
+      {% for field, title, hint in [
+        ("blocked_users", "Заблокированные пользователи", "id или @ник, по одному в строке"),
+        ("blocked_peers", "Заблокированные чаты", "peer_id, по одному в строке"),
+        ("allowed_peers", "Белый список чатов", "пусто — все"),
+        ("auto_reply_users", "Автоответ в личке", "id или @ник — бот отвечает без тега"),
+        ("auto_reply_peers", "Беседы с автоответом", "peer_id — бот отвечает всем без тега"),
+        ("onboarding_peers", "Беседы со знакомством новичков", "peer_id")] %}
+      <label>{{ title }} <small>{{ hint }}</small>
+        <textarea name="{{ field }}" class="mono" style="min-height:4.5rem" x-data="autogrow" @input="grow()">{{ v[field] }}</textarea></label>
+      {% endfor %}
+    </details>
+    <details open>
+      <summary><b>Промпты</b> <span class="muted">слои системного сообщения</span></summary>
+      {% for field, title, hint in [
+        ("private_prompt", "private_prompt", "личка, общий для всех собеседников"),
+        ("user_prompts", "user_prompts", "«@ник: текст», по одному в строке"),
+        ("chat_prompt", "chat_prompt", "беседы с автоответом, общий"),
+        ("peer_prompts", "peer_prompts", "«peer_id: текст», по одному в строке"),
+        ("peer_blocked_users", "peer_blocked_users", "кого игнорировать в беседе: «peer_id: @ник id …», по одной беседе в строке")] %}
+      <label>{{ title }} <small>{{ hint }}</small>
+        <textarea name="{{ field }}" class="mono" style="min-height:4.5rem" x-data="autogrow" @input="grow()">{{ v[field] }}</textarea></label>
+      {% endfor %}
+    </details>
+    <footer class="sticky-actions"><button>Сохранить</button></footer>
+  </article>
+</form>

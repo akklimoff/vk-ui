@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 
 from bot.access import AccessFile, join_lines, parse_access, scoped_prompts
+from bot.config import parse_ids
 from bot.context import build_context
 from bot.llm import PERSONA_LAYER, PRIVATE_LAYER, SYSTEM_LAYER, USER_LAYER, compose_system_message
 from bot.personas import load_persona, persona_path, render_persona
@@ -22,12 +23,14 @@ class StatusView:
     errors_last_hour: int
     last_event_ago: float | None
     last_reply_ago: float | None
-    started_at: float | None
+    uptime: float | None
     interviews: list[tuple[int, int, int]]
 
 
-def status_view(state_dir: str, now: float) -> StatusView:
+def status_view(state_dir: str, now: float, runtime: dict | None = None) -> StatusView:
+    """`runtime` — желаемое состояние из runtime.json; status.json отстаёт от него на flush бота."""
     d = read_json(f"{state_dir}/status.json", {})
+    desired = d if runtime is None else runtime
     interviews = [(int(peer), int(user), int(iv.get("asked", 0)))
                   for peer, users in read_json(f"{state_dir}/onboarding.json", {}).items()
                   for user, iv in users.items() if not iv.get("done")]
@@ -40,16 +43,45 @@ def status_view(state_dir: str, now: float) -> StatusView:
         connected=last_event is not None and now - last_event < CONNECTED_WITHIN,
         me_id=d.get("me_id"), me_name=d.get("me_name", ""),
         provider=d.get("provider", ""), model=d.get("model", ""),
-        active_persona=d.get("active_persona", ""), paused=bool(d.get("paused")),
+        active_persona=desired.get("active_persona", ""), paused=bool(desired.get("paused")),
         errors_last_hour=int(d.get("errors_last_hour", 0)),
         last_event_ago=ago(last_event), last_reply_ago=ago(d.get("last_reply_at")),
-        started_at=d.get("started_at"), interviews=interviews,
+        uptime=ago(d.get("started_at")), interviews=interviews,
     )
-
 
 
 def load_runtime_dict(path: str) -> dict:
     return read_json(path, {})
+
+
+RUNTIME_FORM_FIELDS = {
+    "temperature": ("Температура", float),
+    "reply_delay_min": ("Задержка ответа от", float),
+    "reply_delay_max": ("Задержка ответа до", float),
+    "context_messages": ("Сообщений контекста", int),
+    "dm_debounce_seconds": ("Пауза перед ответом в личке", float),
+}
+
+
+def runtime_form_values(rt) -> dict[str, str]:
+    values = {field: str(getattr(rt, field)) for field in RUNTIME_FORM_FIELDS}
+    values["paused_peers"] = ", ".join(str(p) for p in sorted(rt.paused_peers))
+    return values
+
+
+def parse_runtime_form(form: dict) -> dict:
+    data = {}
+    for field, (title, cast) in RUNTIME_FORM_FIELDS.items():
+        raw = (form.get(field) or "").strip()
+        try:
+            data[field] = cast(raw)
+        except ValueError:
+            raise ValueError(f"{title}: нужно число, а не «{raw}»") from None
+    try:
+        data["paused_peers"] = sorted(parse_ids(form.get("paused_peers", "")))
+    except ValueError:
+        raise ValueError("Чаты на паузе: peer_id через запятую") from None
+    return data
 
 
 def save_runtime_patch(path: str, **fields) -> None:
@@ -144,6 +176,15 @@ def access_form_values(path: str) -> dict:
 
 
 GROUP_CHAT_PEER_BASE = 2_000_000_000
+
+
+def peer_label(peer_id: int) -> str:
+    return f"беседа {peer_id - GROUP_CHAT_PEER_BASE}" if peer_id >= GROUP_CHAT_PEER_BASE else f"id{peer_id}"
+
+
+def peer_link(peer_id: int) -> str:
+    sel = f"c{peer_id - GROUP_CHAT_PEER_BASE}" if peer_id >= GROUP_CHAT_PEER_BASE else str(peer_id)
+    return f"https://vk.com/im?sel={sel}"
 
 
 def sandbox_reply(settings, llm, vk, *, persona_slug: str, conversation: str, peer_id: int | None,
