@@ -9,6 +9,12 @@
       <label>Температура <input name="temperature" type="text" inputmode="decimal" value="{{ form.temperature if form else '0.8' }}"></label>
       <label>Кто спрашивает <input name="asker" value="{{ form.asker if form else 'Собеседник' }}"></label>
     </div>
+    <label>Модель <select name="model">
+      <option value="" {{ 'selected' if not active_model }}>по умолчанию из .env ({{ default_model }})</option>
+      {% for group, models in model_groups %}<optgroup label="{{ group }}">
+        {% for m in models %}<option value="{{ m.id }}" {{ 'selected' if m.id == active_model }}>{{ m.label }}</option>{% endfor %}
+      </optgroup>{% endfor %}
+    </select></label>
     <div class="grid">
       <label>peer_id из VK <small>пусто — берём диалог из поля ниже</small>
         <input name="peer_id" type="text" inputmode="numeric" value="{{ form.peer_id if form else '' }}"></label>

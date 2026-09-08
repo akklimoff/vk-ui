@@ -7,16 +7,18 @@ from fastapi.staticfiles import StaticFiles
 
 from bot.config import Settings
 from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
-from bot.llm import LlmClient
+from bot.llm import LlmClient, available_models, secrets_of
 from bot.status import ReplyLog, write_json_atomic
 from bot.vk import VkClient
 from web.auth import make_guard
 from bot.personas import list_personas, load_persona
 from bot.privacy import sanitize_reply
 from web.render import Renderer, is_hx
-from web.services import (access_form_values, access_raw, load_runtime_dict, parse_access_form,
-                          parse_runtime_form, peer_label, peer_link, prompt_view, runtime_form_values,
-                          sandbox_reply, save_persona, save_runtime_patch, status_view)
+from web.services import (access_form_values, access_raw, default_model_label, load_runtime_dict,
+                          model_groups, model_label, parse_access_form, parse_runtime_form, peer_label,
+                          peer_link,
+                          prompt_view, runtime_form_values, sandbox_reply, save_persona,
+                          save_runtime_patch, status_view)
 
 HERE = os.path.dirname(__file__)
 
@@ -27,7 +29,8 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
     guard = make_guard(settings.web_password)
     app = FastAPI(dependencies=[Depends(guard)])
     app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
-    render = Renderer(os.path.join(HERE, "templates"), peer_label=peer_label, peer_link=peer_link)
+    render = Renderer(os.path.join(HERE, "templates"), peer_label=peer_label, peer_link=peer_link,
+                      model_label=model_label)
     app.state.vk = None
     app.state.llm = None
 
@@ -42,7 +45,10 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
         return app.state.llm
 
     def safe_error(e: Exception) -> str:
-        return sanitize_reply(str(e), (settings.vk_token, settings.llm_api_key))
+        return sanitize_reply(str(e), (settings.vk_token, *secrets_of(settings)))
+
+    def models_ctx() -> dict:
+        return {"model_groups": model_groups(settings), "default_model": default_model_label(settings)}
 
     def status_ctx():
         view = status_view(settings.state_dir, now=time.time(), runtime=load_runtime_dict(settings.runtime_file))
@@ -111,18 +117,22 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
     @app.get("/settings")
     def settings_page(request: Request):
         rt = parse_runtime(load_runtime_dict(settings.runtime_file), runtime_defaults(settings))
-        return render.page(request, "settings", {"form": runtime_form_values(rt), "page": "settings"})
+        return render.page(request, "settings",
+                           {"form": runtime_form_values(rt), "page": "settings", **models_ctx()})
 
     @app.post("/settings")
     async def save_settings(request: Request):
         form = {k: str(v) for k, v in (await request.form()).items()}
         current = load_runtime_dict(settings.runtime_file)
+        allowed = {m.id for m in available_models(settings)}
         try:
-            rt = parse_runtime({**current, **parse_runtime_form(form)}, runtime_defaults(settings))
+            rt = parse_runtime({**current, **parse_runtime_form(form, allowed)}, runtime_defaults(settings))
         except ValueError as e:
-            return render.invalid(request, "settings", {"form": form, "page": "settings"}, str(e))
+            return render.invalid(request, "settings",
+                                  {"form": form, "page": "settings", **models_ctx()}, str(e))
         write_json_atomic(settings.runtime_file, {**current, **dump_runtime(rt)})
-        return render.saved(request, "settings", {"form": runtime_form_values(rt), "page": "settings"},
+        return render.saved(request, "settings",
+                            {"form": runtime_form_values(rt), "page": "settings", **models_ctx()},
                             toast="Сохранено", redirect="/settings")
 
     @app.post("/settings/pause")
@@ -167,9 +177,12 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
         return RedirectResponse("/replies", status_code=303)
 
     def sandbox_ctx(**extra):
-        active = load_runtime_dict(settings.runtime_file).get("active_persona", "")
-        return {"personas": list_personas(settings.personas_dir), "active": active,
-                "page": "sandbox", "result": None, "context": "", "form": None, **extra}
+        runtime = load_runtime_dict(settings.runtime_file)
+        return {"personas": list_personas(settings.personas_dir),
+                "active": runtime.get("active_persona", ""),
+                "active_model": runtime.get("active_model", ""),
+                "page": "sandbox", "result": None, "context": "", "form": None,
+                **models_ctx(), **extra}
 
     @app.get("/sandbox")
     def sandbox_page(request: Request):
@@ -178,7 +191,7 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
     @app.post("/sandbox")
     def sandbox_run(request: Request, persona: str = Form(""), conversation: str = Form(""),
                     peer_id: str = Form(""), count: str = Form("40"), asker: str = Form("Собеседник"),
-                    temperature: str = Form("0.8")):
+                    temperature: str = Form("0.8"), model: str = Form("")):
         form = {"conversation": conversation, "peer_id": peer_id, "count": count,
                 "asker": asker, "temperature": temperature}
         try:
@@ -190,10 +203,12 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
         try:
             context, reply = sandbox_reply(settings, llm(), vk() if pid is not None else None,
                                            persona_slug=persona, conversation=conversation, peer_id=pid,
-                                           count=n, asker=asker, temperature=temp)
+                                           count=n, asker=asker, temperature=temp, model=model)
         except Exception as e:
-            return render.invalid(request, "sandbox", sandbox_ctx(), f"Не удалось получить ответ: {safe_error(e)}")
-        return render.page(request, "sandbox", sandbox_ctx(result=reply, context=context, active=persona, form=form))
+            return render.invalid(request, "sandbox", sandbox_ctx(active_model=model),
+                                  f"Не удалось получить ответ: {safe_error(e)}")
+        return render.page(request, "sandbox", sandbox_ctx(result=reply, context=context, active=persona,
+                                                           active_model=model, form=form))
 
     return app
 

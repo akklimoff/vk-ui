@@ -11,7 +11,7 @@ AUTH = ("admin", "pw")
 def settings(tmp_path):
     (tmp_path / "config" / "personas").mkdir(parents=True)
     return Settings(
-        vk_token="vk", llm_api_key="k", web_password="pw",
+        vk_token="vk", llm_api_key="k", anthropic_api_key="sk-ant-k", web_password="pw",
         access_file=str(tmp_path / "config" / "access.json"),
         runtime_file=str(tmp_path / "config" / "runtime.json"),
         personas_dir=str(tmp_path / "config" / "personas"),

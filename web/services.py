@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from bot.access import AccessFile, join_lines, parse_access, scoped_prompts
 from bot.config import parse_ids
 from bot.context import build_context
-from bot.llm import PERSONA_LAYER, PRIVATE_LAYER, SYSTEM_LAYER, USER_LAYER, compose_system_message
+from bot.llm import (PERSONA_LAYER, PRIVATE_LAYER, PROVIDERS, SYSTEM_LAYER, USER_LAYER,
+                     available_models, compose_system_message, find_model, resolve_provider)
 from bot.personas import load_persona, persona_path, render_persona
 from bot.status import read_json, write_json_atomic
 
@@ -39,10 +40,12 @@ def status_view(state_dir: str, now: float, runtime: dict | None = None) -> Stat
         return None if ts is None else round(now - ts, 1)
 
     last_event = d.get("last_event_at")
+    chosen = find_model(desired.get("active_model", ""))
     return StatusView(
         connected=last_event is not None and now - last_event < CONNECTED_WITHIN,
         me_id=d.get("me_id"), me_name=d.get("me_name", ""),
-        provider=d.get("provider", ""), model=d.get("model", ""),
+        provider=chosen.provider if chosen else d.get("provider", ""),
+        model=chosen.label if chosen else d.get("model", ""),
         active_persona=desired.get("active_persona", ""), paused=bool(desired.get("paused")),
         errors_last_hour=int(d.get("errors_last_hour", 0)),
         last_event_ago=ago(last_event), last_reply_ago=ago(d.get("last_reply_at")),
@@ -66,10 +69,11 @@ RUNTIME_FORM_FIELDS = {
 def runtime_form_values(rt) -> dict[str, str]:
     values = {field: str(getattr(rt, field)) for field in RUNTIME_FORM_FIELDS}
     values["paused_peers"] = ", ".join(str(p) for p in sorted(rt.paused_peers))
+    values["active_model"] = rt.active_model
     return values
 
 
-def parse_runtime_form(form: dict) -> dict:
+def parse_runtime_form(form: dict, allowed_models=()) -> dict:
     data = {}
     for field, (title, cast) in RUNTIME_FORM_FIELDS.items():
         raw = (form.get(field) or "").strip()
@@ -77,11 +81,35 @@ def parse_runtime_form(form: dict) -> dict:
             data[field] = cast(raw)
         except ValueError:
             raise ValueError(f"{title}: нужно число, а не «{raw}»") from None
+    model = (form.get("active_model") or "").strip()
+    if model and model not in allowed_models:
+        raise ValueError(f"Модель: «{model}» недоступна, проверьте ключ провайдера в .env")
+    data["active_model"] = model
     try:
         data["paused_peers"] = sorted(parse_ids(form.get("paused_peers", "")))
     except ValueError:
         raise ValueError("Чаты на паузе: peer_id через запятую") from None
     return data
+
+
+def model_groups(settings) -> list[tuple[str, list]]:
+    """Модели для выпадающего списка, сгруппированные по провайдеру."""
+    groups: dict[str, list] = {}
+    for model in available_models(settings):
+        groups.setdefault(model.provider, []).append(model)
+    return [(PROVIDERS[name].label or name, models) for name, models in groups.items()]
+
+
+def model_label(model_id: str) -> str:
+    found = find_model(model_id)
+    return found.label if found else model_id
+
+
+def default_model_label(settings) -> str:
+    try:
+        return resolve_provider(settings.llm_provider, settings.llm_base_url, settings.llm_model).model
+    except ValueError:
+        return settings.llm_model or settings.llm_provider
 
 
 def save_runtime_patch(path: str, **fields) -> None:
@@ -188,7 +216,7 @@ def peer_link(peer_id: int) -> str:
 
 
 def sandbox_reply(settings, llm, vk, *, persona_slug: str, conversation: str, peer_id: int | None,
-                  count: int, asker: str, temperature: float) -> tuple[str, str]:
+                  count: int, asker: str, temperature: float, model: str = "") -> tuple[str, str]:
     persona = load_persona(settings.personas_dir, persona_slug) if persona_slug else None
     persona_prompt = persona.prompt if persona else settings.persona_prompt
     is_private, auto_chat, general_prompt, specific_prompt = False, False, "", ""
@@ -202,5 +230,5 @@ def sandbox_reply(settings, llm, vk, *, persona_slug: str, conversation: str, pe
         auto_chat = peer_id in lists.auto_reply_peers or peer_id in lists.onboarding_peers
     reply = llm.reply(conversation, asker, is_private=is_private, private_prompt=general_prompt,
                       user_prompt=specific_prompt, persona_prompt=persona_prompt,
-                      temperature=temperature, auto_chat=auto_chat)
+                      temperature=temperature, auto_chat=auto_chat, model=model)
     return conversation, reply

@@ -47,6 +47,14 @@ def test_status_view_takes_pause_and_persona_from_runtime(settings):
     assert v.paused and v.active_persona == "new"
 
 
+def test_status_view_shows_the_model_chosen_in_runtime(settings):
+    write_json_atomic(f"{settings.state_dir}/status.json", {"provider": "grok", "model": "grok-4.3"})
+    same = status_view(settings.state_dir, now=1.0, runtime={})
+    assert (same.provider, same.model) == ("grok", "grok-4.3")
+    switched = status_view(settings.state_dir, now=1.0, runtime={"active_model": "claude-opus-5"})
+    assert (switched.provider, switched.model) == ("claude", "Claude Opus 5")
+
+
 def test_status_page_labels_interview_chat(client, settings):
     write_json_atomic(f"{settings.state_dir}/onboarding.json", {"2000000001": {"558": {"asked": 1}}})
     assert "беседа 1" in client.get("/", auth=AUTH).text

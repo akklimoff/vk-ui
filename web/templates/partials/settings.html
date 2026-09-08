@@ -1,8 +1,15 @@
 <form id="settings-form" method="post" action="/settings" hx-post="/settings" hx-target="#settings-form" hx-swap="outerHTML">
   <article>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <label>Модель <small>меняется на лету, перезапуск не нужен</small>
+      <select name="active_model">
+        <option value="" {{ 'selected' if not form.active_model }}>по умолчанию из .env ({{ default_model }})</option>
+        {% for group, models in model_groups %}<optgroup label="{{ group }}">
+          {% for m in models %}<option value="{{ m.id }}" {{ 'selected' if m.id == form.active_model }}>{{ m.label }}</option>{% endfor %}
+        </optgroup>{% endfor %}
+      </select></label>
     <div class="grid">
-      <label>Температура <small>0 — предсказуемо, 1 — креативно</small>
+      <label>Температура <small>0 — предсказуемо, 1 — креативно; Claude 5 её не принимает</small>
         <input name="temperature" value="{{ form.temperature }}" type="text" inputmode="decimal" required></label>
       <label>Сообщений контекста
         <input name="context_messages" value="{{ form.context_messages }}" type="text" inputmode="numeric" required></label>

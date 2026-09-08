@@ -46,6 +46,14 @@ def test_sandbox_from_text_does_not_touch_vk(client):
     assert client.app.state.vk is None
 
 
+def test_sandbox_sends_the_chosen_model(client):
+    r = client.post("/sandbox", data={"persona": "v", "conversation": "Вася: привет", "peer_id": "",
+                                      "count": "40", "asker": "Вася", "temperature": "0.8",
+                                      "model": "claude-opus-5"}, auth=AUTH)
+    assert r.status_code == 200 and 'value="claude-opus-5" selected' in r.text
+    assert client.app.state.llm.calls[-1][2]["model"] == "claude-opus-5"
+
+
 def test_sandbox_from_peer_uses_history(client):
     r = client.post("/sandbox", data={"persona": "v", "conversation": "", "peer_id": "2000000001",
                                       "count": "10", "asker": "Вася", "temperature": "0.5"}, auth=AUTH)

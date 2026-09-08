@@ -5,7 +5,7 @@
     <span>{{ (now - r.ts)|ago }}</span> · <span data-ts="{{ r.ts }}" x-text="localTime($el.dataset.ts)"></span>
     · <a href="{{ r.peer_id|peer_link }}">{{ r.peer_id|peer_label }}</a>
     · от <a href="https://vk.com/id{{ r.from_id }}">id{{ r.from_id }}</a>
-    · {{ r.latency_s }} с · {{ r.persona or "по умолчанию" }}
+    · {{ r.latency_s }} с · {{ r.persona or "по умолчанию" }}{% if r.model %} · {{ r.model|model_label }}{% endif %}
     {% if r.rewritten %}<span class="badge">переписан</span>{% endif %}
   </header>
   {% if r.tag %}<p class="muted">→ {{ r.tag }}</p>{% endif %}

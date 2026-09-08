@@ -8,10 +8,24 @@ from tests.web.conftest import AUTH
 
 def test_save_settings_writes_runtime(client, settings):
     r = client.post("/settings", data={"temperature": "0.5", "reply_delay_min": "1", "reply_delay_max": "2",
-                                       "context_messages": "20", "dm_debounce_seconds": "8", "paused_peers": "2000000005, 7"}, auth=AUTH)
+                                       "context_messages": "20", "dm_debounce_seconds": "8",
+                                       "active_model": "claude-opus-5", "paused_peers": "2000000005, 7"}, auth=AUTH)
     assert r.status_code == 303
     d = json.load(open(settings.runtime_file))
     assert d["temperature"] == 0.5 and d["context_messages"] == 20 and d["paused_peers"] == [7, 2000000005]
+    assert d["active_model"] == "claude-opus-5"
+
+
+def test_model_picker_lists_models_of_providers_with_keys(client):
+    body = client.get("/settings", auth=AUTH).text
+    assert "Claude Opus 5" in body and "Grok 4.6" in body and "по умолчанию из .env" in body
+    assert "gpt-5-mini" not in body
+
+
+def test_unknown_model_is_rejected(client, settings):
+    r = client.post("/settings", data={**VALID, "active_model": "gpt-5-mini"}, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and "недоступна" in r.text
+    assert not os.path.exists(settings.runtime_file)
 
 
 def test_pause_toggle_keeps_other_fields(client, settings):
@@ -31,7 +45,8 @@ def test_bad_number_returns_400(client):
 
 HX = {"HX-Request": "true"}
 VALID = {"temperature": "0.5", "reply_delay_min": "1", "reply_delay_max": "2",
-         "context_messages": "20", "dm_debounce_seconds": "8", "paused_peers": "2000000005, 7"}
+         "context_messages": "20", "dm_debounce_seconds": "8", "active_model": "",
+         "paused_peers": "2000000005, 7"}
 
 
 def test_save_settings_hx_returns_form_partial_with_toast(client):
@@ -54,4 +69,6 @@ def test_parse_runtime_form_names_bad_field():
         parse_runtime_form({**VALID, "paused_peers": "1, x"})
     assert parse_runtime_form(VALID) == {"temperature": 0.5, "reply_delay_min": 1.0, "reply_delay_max": 2.0,
                                          "context_messages": 20, "dm_debounce_seconds": 8.0,
-                                         "paused_peers": [7, 2000000005]}
+                                         "active_model": "", "paused_peers": [7, 2000000005]}
+    with pytest.raises(ValueError, match="Модель"):
+        parse_runtime_form({**VALID, "active_model": "grok-4.6"})
