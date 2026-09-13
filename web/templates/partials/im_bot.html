@@ -1,35 +1,37 @@
+{% from "partials/im_icons.html" import icon %}
 <div id="bot-panel" class="im-bot">
   <span id="chat-badge" hx-swap-oob="true">{% with m = mode %}{% include "partials/im_badge.html" %}{% endwith %}</span>
+  <header class="im-bot-head">
+    <span class="ava a32 robot">{{ icon('robot_outline_24') }}</span>
+    <span class="body"><span class="line"><b>Бот в этом чате</b>{% with m = mode %}{% include "partials/im_badge.html" %}{% endwith %}</span><small title="{{ mode.reason }}">{{ mode.reason }}</small></span>
+    <button type="button" class="ib" @click="panel = false" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
+  </header>
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
-  <header><b>Бот в этом чате</b> {% with m = mode %}{% include "partials/im_badge.html" %}{% endwith %}
-    <small class="muted">{{ mode.reason }}</small></header>
+  <h4>Режим</h4>
   {% for switch, title, hint, value, show in [
       ("auto", "Отвечать без тега", "на каждое сообщение" if c.private else "всем участникам, как в личке", c.auto, True),
       ("onboarding", "Знакомиться с новичками", "вопросы вошедшим", c.onboarding, not c.private),
       ("paused", "Пауза в этом чате", "runtime.paused_peers", c.paused, True),
       ("blocked", "Заблокировать", "бот молчит здесь всегда", c.blocked, True)] %}
   {% if show %}<form hx-post="/im/{{ peer_id }}/bot/{{ switch }}" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
-    <label class="switch-row"><input type="checkbox" role="switch" name="on" value="1" {{ 'checked' if value }}>
-      <span>{{ title }}<small class="muted">{{ hint }}</small></span></label>
+    <label class="switch-row"><span>{{ title }}<small>{{ hint }}</small></span><input type="checkbox" role="switch" class="sw" name="on" value="1" {{ 'checked' if value }}></label>
   </form>{% endif %}{% endfor %}
-  <label class="switch-row" x-data="readMark"><input type="checkbox" role="switch" :checked="silent" @change="toggle($event.target.checked)">
-    <span>Читать без отметки<small class="muted">VK не увидит, что сообщения прочитаны; во всех чатах этого браузера</small></span></label>
-  <form hx-post="/im/{{ peer_id }}/bot/personas" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
-    <label>Персоны для этого чата <small>пусто — активная «{{ active or 'по умолчанию' }}»; несколько — случайная на каждый ответ</small></label>
-    <div class="persona-list">{% for p in personas %}
-      <label><input type="checkbox" name="slug" value="{{ p.slug }}" {{ 'checked' if p.slug in c.personas }}> {{ p.name }}</label>{% endfor %}</div>
+  <label class="switch-row" x-data="readMark"><span>Читать без отметки<small>VK не увидит, что сообщения прочитаны; во всех чатах этого браузера</small></span>
+    <input type="checkbox" role="switch" class="sw" :checked="silent" @change="toggle($event.target.checked)"></label>
+  <h4>Персоны <small>пусто — активная «{{ active or 'по умолчанию' }}»; несколько — случайная на каждый ответ</small></h4>
+  <form class="persona-list" hx-post="/im/{{ peer_id }}/bot/personas" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
+    {% for p in personas %}<label class="chip-p"><input type="checkbox" name="slug" value="{{ p.slug }}" {{ 'checked' if p.slug in c.personas }} hidden><span>{{ p.name }}</span></label>{% endfor %}
   </form>
-  <form hx-post="/im/{{ peer_id }}/bot/prompt" hx-target="#bot-panel" hx-swap="outerHTML">
-    <label>{{ "Про этого собеседника" if c.private else "Про эту беседу" }} <small>слой {{ "user_prompts" if c.private else "peer_prompts" }}</small>
-      <textarea name="text" x-data="autogrow" @input="grow()">{{ c.prompt }}</textarea></label>
-    <button class="outline">Сохранить промпт</button>
+  <h4>{{ "Про этого собеседника" if c.private else "Про эту беседу" }} <small>слой {{ "user_prompts" if c.private else "peer_prompts" }}</small></h4>
+  <form class="prompt" hx-post="/im/{{ peer_id }}/bot/prompt" hx-target="#bot-panel" hx-swap="outerHTML">
+    <textarea name="text" x-data="autogrow" @input="grow()">{{ c.prompt }}</textarea>
+    <button class="vk-btn">Сохранить</button>
   </form>
-  {% if members %}<details open><summary>Участники <span class="muted">{{ members|length }}</span></summary>
-    <ul class="members">{% for uid, name, photo in members %}<li>
-      <span class="ava">{% if photo %}<img src="{{ photo }}" alt="">{% endif %}</span>
-      <a href="https://vk.com/id{{ uid }}">{{ name }}</a>
-      <form hx-post="/im/{{ peer_id }}/bot/members/{{ uid }}" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
-        <label title="Не отвечать этому участнику в этой беседе"><input type="checkbox" role="switch" name="on" value="1" {{ 'checked' if uid in c.blocked_members }}> игнор</label>
-      </form></li>{% endfor %}</ul>
-  </details>{% endif %}
+  {% if members %}<h4>Участники <small>{{ members|length }}</small></h4>
+  <ul class="members">{% for uid, name, photo in members %}<li>
+    <span class="ava a32">{% if photo %}<img src="{{ photo }}" alt="">{% else %}<i>{{ name[:1] }}</i>{% endif %}</span>
+    <a href="https://vk.com/id{{ uid }}">{{ name }}</a>
+    <form hx-post="/im/{{ peer_id }}/bot/members/{{ uid }}" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
+      <label title="Не отвечать этому участнику в этой беседе"><small>игнор</small><input type="checkbox" role="switch" class="sw" name="on" value="1" {{ 'checked' if uid in c.blocked_members }}></label>
+    </form></li>{% endfor %}</ul>{% endif %}
 </div>
