@@ -325,3 +325,12 @@ def test_voice_player_renders_wave_bars_and_transcript_toggle(client):
     assert "vk-icons.svg#play_circle_32" in voice and "vk-icons.svg#pause_circle_32" in voice
     assert 'class="aa"' in voice and "после смены выкину</p>" in voice
     assert "<audio" not in voice and "0:20" in voice
+
+
+def test_composer_is_a_vk_card_with_icon_buttons(client):
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    form = r.text.split('class="im-composer"')[1].split("</form>")[0]
+    assert 'class="box"' in form and "vk-icons.svg#send_24" in form and "vk-icons.svg#magic_wand_outline_24" in form
+    assert "vk-icons.svg#add_circle_outline_24" in form and 'placeholder="Сообщение"' in form
+    assert ':class="{ ready }"' in form and "✨" not in form
+    assert 'class="im-down"' in r.text

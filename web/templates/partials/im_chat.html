@@ -27,19 +27,22 @@
           hx-post="/im/{{ c.peer_id }}/send" hx-target="#messages" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]"
           hx-vals='js:{...lastRendered()}'
           @htmx:after-request="if ($event.detail.elt === $el && $event.detail.xhr.status < 300) reset()" @im-reply.window="quote($event.detail)">
-      <div class="quote-bar" x-show="reply" x-cloak><b x-text="reply?.author"></b><span x-text="reply?.text"></span>
-        <button type="button" @click="reply = null" aria-label="Убрать цитату">×</button></div>
-      <small id="composer-error" class="im-composer-error"></small>
-      <input type="hidden" name="reply_to" :value="reply?.id || ''">
-      <div class="file-chip" x-show="file" x-cloak><span x-text="file?.name"></span><span class="muted" x-text="size"></span>
-        <button type="button" @click="clearFile()" aria-label="Убрать файл">×</button></div>
-      <div class="row-input">
-        <label class="attach" title="Голосовое из .ogg/.mp3"><input type="file" name="voice" accept=".ogg,.mp3,audio/ogg,audio/mpeg" x-ref="f" @change="pick()" hidden><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"/></svg></label>
-        <textarea name="text" rows="1" placeholder="Сообщение" x-ref="t" x-model="text" @input="grow()"
-                  @keydown.enter="if (!$event.shiftKey && !$event.isComposing) { $event.preventDefault(); $el.form.requestSubmit() }" @keydown.escape="reply = null"></textarea>
-        <button type="button" class="draft" title="Черновик от бота" hx-post="/im/{{ c.peer_id }}/draft" hx-params="none" hx-swap="none"
-                hx-disabled-elt="this" @htmx:after-request="if ($event.detail.xhr.status === 200) draft($event.detail.xhr.responseText)">✨</button>
-        <button type="submit" class="send" aria-label="Отправить"><svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></button>
+      <div class="box">
+        <div class="quote-bar" x-show="reply" x-cloak>{{ icon('reply_24') }}<span class="bar"></span>
+          <span class="body"><b x-text="reply?.author"></b><span x-text="reply?.text"></span></span>
+          <button type="button" class="ib" @click="reply = null" aria-label="Убрать цитату">{{ icon('cancel_20') }}</button></div>
+        <div class="file-chip" x-show="file" x-cloak>{{ icon('document_outline_24') }}<span x-text="file?.name"></span><span class="muted" x-text="size"></span>
+          <button type="button" class="ib" @click="clearFile()" aria-label="Убрать файл">{{ icon('cancel_20') }}</button></div>
+        <small id="composer-error" class="im-composer-error"></small>
+        <input type="hidden" name="reply_to" :value="reply?.id || ''">
+        <div class="row-input">
+          <label class="ib attach" title="Голосовое из .ogg/.mp3"><input type="file" name="voice" accept=".ogg,.mp3,audio/ogg,audio/mpeg" x-ref="f" @change="pick()" hidden>{{ icon('add_circle_outline_24') }}</label>
+          <textarea name="text" rows="1" placeholder="Сообщение" x-ref="t" x-model="text" @input="grow()"
+                    @keydown.enter="if (!$event.shiftKey && !$event.isComposing) { $event.preventDefault(); if (ready) $el.form.requestSubmit() }" @keydown.escape="reply = null"></textarea>
+          <button type="button" class="ib draft" title="Черновик от бота" aria-label="Черновик от бота" hx-post="/im/{{ c.peer_id }}/draft" hx-params="none" hx-swap="none"
+                  hx-disabled-elt="this" @htmx:after-request="if ($event.detail.xhr.status === 200) draft($event.detail.xhr.responseText)">{{ icon('magic_wand_outline_24') }}</button>
+          <button type="submit" class="ib send" :class="{ ready }" @click="if (!ready) $event.preventDefault()" aria-label="Отправить">{{ icon('send_24') }}</button>
+        </div>
       </div>
     </form>
   </div>
