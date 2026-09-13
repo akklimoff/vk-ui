@@ -43,7 +43,7 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("chat", (peerId, outRead) => ({
-    peerId, outRead, fromBottom: 0, stick: true, readUpTo: 0, settling: false, panel: false,
+    peerId, outRead, fromBottom: 0, stick: true, readUpTo: 0, settling: false, panel: false, viewer: null, atBottom: true, pending: 0,
     init() {
       // синхронно, а не в $nextTick: иначе IntersectionObserver успевает увидеть сентинел
       // вверху ещё не прокрученного списка и зря грузит страницу старых
@@ -108,7 +108,10 @@ document.addEventListener("alpine:init", () => {
       return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     },
     scrollBottom() { this.$refs.list.scrollTop = this.$refs.list.scrollHeight; },
+    onScroll() {},
   }));
+
+  Alpine.data("voice", () => ({}));
 
   Alpine.data("readMark", () => ({
     silent: !readOnOpen(),

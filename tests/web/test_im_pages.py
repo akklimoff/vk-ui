@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.web.conftest import AUTH
-from tests.web.im_fixtures import CONVERSATIONS, HISTORY, MEMBERS, ME, PEER_CHAT, SENT, UPLOADED_VOICE
+from tests.web.im_fixtures import CONVERSATIONS, HISTORY, MEMBERS, ME, PEER_CHAT, PEER_USER, SENT, UPLOADED_VOICE
 from web.app import create_app
 
 
@@ -81,7 +81,7 @@ def test_im_page_with_sel_renders_chat(client):
     assert r.status_code == 200
     assert "ну все тогда" in r.text and "после смены выкину." in r.text
     assert "23 участника" in r.text
-    assert 'src="https://cdn.example/v.mp3"' in r.text and "0:20" in r.text
+    assert 'voice("https://cdn.example/v.mp3", 20)' in r.text and "0:20" in r.text
     assert "после смены выкину</" in r.text          # расшифровка голосового
     assert "пригласил(а) Аня Иванова" in r.text
     assert 'src="https://cdn.example/st256.png"' in r.text
@@ -280,3 +280,38 @@ def test_dialog_rows_show_mute_icon_ticks_and_short_age(client):
 def test_empty_state_template_is_on_the_page(client):
     r = client.get("/im", auth=AUTH)
     assert r.text.count("Выберите чат") == 2 and '<template id="im-empty">' in r.text
+
+
+def test_chat_opening_puts_unread_separator_before_first_unread_incoming(client):
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    assert r.text.index('data-id="501"') < r.text.index('class="im-unread"') < r.text.index('data-id="502"')
+    poll = client.get(f"/im/{PEER_CHAT}/messages?after=500", auth=AUTH, headers={"HX-Request": "true"})
+    assert "im-unread" not in poll.text
+
+
+def test_chat_header_shows_presence_for_users(client):
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.history_page = lambda *a, **k: {**HISTORY, "conversations": [CONVERSATIONS["items"][1]["conversation"]]}
+    r = client.get(f"/im?sel={PEER_USER}", auth=AUTH)
+    assert "была в сети 3 июля" in r.text and "в 09:15" in r.text
+    assert "vk-icons.svg#cancel_24" in r.text and "vk-icons.svg#chevron_left_24" in r.text
+
+
+def test_only_own_messages_get_a_delete_button(client):
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    own = r.text.split('data-id="501"')[1].split("</article>")[0]
+    other = r.text.split('data-id="500"')[1].split("</article>")[0]
+    assert "/messages/501/delete" in own and "vk-icons.svg#delete_outline_24" in own
+    assert "delete" not in other and "vk-icons.svg#reply_24" in other
+    assert 'class="info"' in own and "vk-icons.svg#check_double_outline_16" in own
+
+
+def test_photo_opens_in_viewer(client):
+    photo = {"id": 600, "date": 1788876300, "peer_id": PEER_CHAT, "from_id": 11, "out": 0, "text": "",
+             "attachments": [{"type": "photo", "photo": {"sizes": [{"url": "https://cdn.example/p_x.jpg", "width": 604},
+                                                                    {"url": "https://cdn.example/p_w.jpg", "width": 1280}]}}]}
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.history_page = lambda *a, **k: {**HISTORY, "items": [photo] + HISTORY["items"]}
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    assert """@click.prevent='viewer = "https://cdn.example/p_w.jpg"'""" in r.text
+    assert 'class="im-viewer"' in r.text

@@ -1,0 +1,2 @@
+<div class="voice" x-data='voice({{ a.url|tojson }}, {{ a.duration }})'><audio controls preload="none" src="{{ a.url }}"></audio><span class="dur">{{ a.duration|mmss }}</span>
+  {% if a.transcript %}<p class="transcript">{{ a.transcript }}</p>{% endif %}</div>
