@@ -129,3 +129,41 @@ def test_older_page_replaces_sentinel(client):
     assert r.status_code == 200
     assert client.app.state.vk.calls[-1] == ("history", PEER_CHAT, 40, 499)
     assert 'class="im-more"' in r.text and "before=499" in r.text   # фикстура отдаёт те же id — сентинел на самый старый
+
+
+def test_send_text_appends_sent_message(client):
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "привет из админки", "reply_to": "500"},
+                    auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    vk = client.app.state.vk
+    assert ("send", PEER_CHAT, "привет из админки", 500, "") in vk.calls
+    assert ("by_id", (503,)) in vk.calls
+    assert 'data-id="503"' in r.text and "привет из админки" in r.text
+    assert "after=503" in r.text                    # курсор поллинга сдвинут, чтобы не продублировать
+
+
+def test_send_empty_is_422(client):
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "   "}, auth=AUTH, headers={"HX-Request": "true"})
+    vk = client.app.state.vk
+    assert r.status_code == 422 and (vk is None or "send" not in [c[0] for c in vk.calls])
+
+
+def test_send_vk_error_is_sanitized(client, settings):
+    def boom(*a, **k):
+        raise RuntimeError(f"bad token {settings.vk_token}")
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.send = boom
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "x"}, auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 422 and settings.vk_token not in r.text and "[скрыто]" in r.text
+
+
+def test_mark_read_and_delete(client):
+    assert client.post(f"/im/{PEER_CHAT}/read", auth=AUTH, headers={"HX-Request": "true"}).status_code == 204
+    assert client.post(f"/im/{PEER_CHAT}/messages/501/delete", auth=AUTH, headers={"HX-Request": "true"}).status_code == 200
+    calls = client.app.state.vk.calls
+    assert ("read", PEER_CHAT) in calls and ("delete", 501) in calls
+
+
+def test_reply_button_payload_survives_attribute_quoting(client):
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    assert "@click='$dispatch(\"im-reply\", { id: 501, author: \"" in r.text

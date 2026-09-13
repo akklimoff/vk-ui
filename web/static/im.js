@@ -1,3 +1,11 @@
+function readOnOpen() {
+  try {
+    return localStorage.getItem("im.readOnOpen") !== "off";
+  } catch {
+    return true;
+  }
+}
+
 document.addEventListener("alpine:init", () => {
   Alpine.data("im", (sel) => ({
     sel, pane: sel ? "chat" : "list", filter: "", unreadOnly: false,
@@ -13,7 +21,7 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("chat", (peerId, outRead) => ({
-    peerId, outRead, fromBottom: 0, stick: true,
+    peerId, outRead, fromBottom: 0, stick: true, readUpTo: 0, settling: false,
     init() {
       // синхронно, а не в $nextTick: иначе IntersectionObserver успевает увидеть сентинел
       // вверху ещё не прокрученного списка и зря грузит страницу старых
@@ -30,14 +38,53 @@ document.addEventListener("alpine:init", () => {
         const state = document.getElementById("chat-state");
         if (state) this.outRead = Number(state.dataset.outRead);
         const target = e.detail.target;
-        if (target.id === "messages" && this.stick) this.scrollBottom();
+        if (target.id === "messages") this.settleMessages();
         if (target.classList.contains("im-more")) this.$refs.list.scrollTop = this.$refs.list.scrollHeight - this.fromBottom;
       });
+      this.$nextTick(() => this.markRead());
+    },
+    // afterSwap приходит на каждый вставленный элемент — разбираем ленту один раз за своп
+    settleMessages() {
+      if (this.settling) return;
+      this.settling = true;
+      queueMicrotask(() => {
+        this.settling = false;
+        this.dedupe();
+        if (this.stick) this.scrollBottom();
+        this.markRead();
+      });
+    },
+    // поллинг, ушедший до отправки, может вернуть уже вставленное отправкой сообщение
+    dedupe() {
+      const seen = new Set();
+      this.$refs.list.querySelectorAll("[data-id]").forEach((el) => {
+        if (seen.has(el.dataset.id)) el.remove();
+        else seen.add(el.dataset.id);
+      });
+    },
+    markRead() {
+      const incoming = [...this.$refs.list.querySelectorAll(".msg:not(.out)")].map((el) => Number(el.dataset.id));
+      const last = Math.max(0, ...incoming);
+      if (last <= this.readUpTo || document.visibilityState !== "visible" || !readOnOpen()) return;
+      this.readUpTo = last;
+      fetch(`/im/${this.peerId}/read`, { method: "POST", headers: { "HX-Request": "true" } });
     },
     nearBottom() {
       const el = this.$refs.list;
       return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     },
     scrollBottom() { this.$refs.list.scrollTop = this.$refs.list.scrollHeight; },
+  }));
+
+  Alpine.data("composer", () => ({
+    text: "", reply: null,
+    grow() { const t = this.$refs.t; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; },
+    quote(d) { this.reply = d; this.$refs.t.focus(); },
+    reset() {
+      this.text = "";
+      this.reply = null;
+      document.getElementById("composer-error").textContent = "";
+      this.$nextTick(() => this.grow());
+    },
   }));
 });

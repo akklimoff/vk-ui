@@ -21,6 +21,12 @@
     {% endfor %}
     {% if m.fwd_count %}<span class="muted">{{ m.fwd_count }} пересланных</span>{% endif %}
   </div>
-  <span class="meta">{% if m.out %}<span class="ticks" :class="{ read: {{ m.id }} <= outRead }">✓<span x-show="{{ m.id }} <= outRead">✓</span></span>{% endif %}<time class="muted">{{ m.ts|clock(tz) }}</time></span>
+  <span class="meta">
+    {# одинарные кавычки: tojson не экранирует двойные #}
+    <span class="actions">
+      <button type="button" title="Ответить" @click='$dispatch("im-reply", { id: {{ m.id }}, author: {{ m.author|tojson }}, text: {{ (m.text or (m|preview))[:80]|tojson }} })'>↩</button>
+      {% if m.out %}<button type="button" title="Удалить" hx-post="/im/{{ c.peer_id }}/messages/{{ m.id }}/delete" hx-confirm="Удалить сообщение у всех?" hx-target="closest article" hx-swap="delete">✕</button>{% endif %}
+    </span>
+    {% if m.out %}<span class="ticks" :class="{ read: {{ m.id }} <= outRead }">✓<span x-show="{{ m.id }} <= outRead">✓</span></span>{% endif %}<time class="muted">{{ m.ts|clock(tz) }}</time></span>
 </article>{% endif %}
 {% endfor %}

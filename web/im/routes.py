@@ -1,7 +1,8 @@
 import time
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.responses import RedirectResponse, Response
 
 from bot.access import AccessFile
 from bot.runtime import RuntimeFile, runtime_defaults
@@ -56,6 +57,15 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
         except Exception as e:
             raise HTTPException(502, f"VK: {safe_error(e)}")
 
+    def sent_ctx(peer_id: int, message_id: int):
+        raw = vk().messages_by_id([message_id])
+        messages, out_read = parse_history(raw, vk().me_id, marks())
+        return {"peer_id": peer_id, "rows": rows(messages, time.time(), tz), "out_read": out_read,
+                "newest": message_id, "oldest": None, "tz": tz}
+
+    def send_form_error(request: Request, error: str):
+        return render.invalid(request, "im_error", {"page": "im"}, error)
+
     @router.get("/im")
     def im_page(request: Request, sel: int | None = None):
         ctx = {"page": "im", "sel": sel, **guard(dialogs_ctx)}
@@ -78,5 +88,31 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
         if not is_hx(request):
             return render.page(request, "im", {"page": "im", "sel": peer_id, "chat": ctx, **guard(dialogs_ctx)})
         return render.partial(request, "im_chat", {"chat": ctx, "page": "im"}, push_url=f"/im?sel={peer_id}")
+
+    @router.post("/im/{peer_id}/send")
+    def send_message(request: Request, peer_id: int, text: str = Form(""), reply_to: str = Form("")):
+        text = text.strip()
+        if not text:
+            return send_form_error(request, "Пустое сообщение")
+        reply_id = int(reply_to) if reply_to.strip() else None
+        try:
+            message_id = vk().send(peer_id, text, reply_to=reply_id)
+            ctx = sent_ctx(peer_id, message_id)
+        except Exception as e:
+            return send_form_error(request, f"VK не отправил: {safe_error(e)}")
+        if not is_hx(request):
+            return RedirectResponse(f"/im?sel={peer_id}", status_code=303)
+        return render.partial(request, "im_rows_page", {"chat": ctx, "after": message_id, "before": None, "page": "im"},
+                              toast="Отправлено")
+
+    @router.post("/im/{peer_id}/read")
+    def mark_read(peer_id: int):
+        guard(lambda: vk().mark_read(peer_id))
+        return Response(status_code=204)
+
+    @router.post("/im/{peer_id}/messages/{message_id}/delete")
+    def delete_message(request: Request, peer_id: int, message_id: int):
+        guard(lambda: vk().delete_message(message_id))
+        return Response(status_code=200) if is_hx(request) else RedirectResponse(f"/im?sel={peer_id}", status_code=303)
 
     return router
