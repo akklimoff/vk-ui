@@ -2,7 +2,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from web.humanize import ago, clock, duration, mmss
+from web.humanize import ago, clock, duration, mmss, plural
 
 
 @pytest.mark.parametrize("seconds, expected", [
@@ -33,3 +33,11 @@ def test_duration(seconds, expected):
 def test_clock_and_mmss():
     assert clock(1788876240, ZoneInfo("Europe/Moscow")) == "17:04"
     assert mmss(20) == "0:20" and mmss(75) == "1:15"
+
+
+@pytest.mark.parametrize("n, expected", [
+    (1, "1 участник"), (3, "3 участника"), (5, "5 участников"), (11, "11 участников"),
+    (21, "21 участник"), (23, "23 участника"), (112, "112 участников"),
+])
+def test_plural(n, expected):
+    assert plural(n, "участник", "участника", "участников") == expected

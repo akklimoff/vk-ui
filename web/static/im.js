@@ -6,6 +6,13 @@ function readOnOpen() {
   }
 }
 
+// для hx-vals поллера и отправки: сервер склеивает серию и день с последним отрисованным рядом
+function lastRendered() {
+  let row = document.getElementById("messages")?.lastElementChild;
+  while (row && !row.dataset.ts) row = row.previousElementSibling;
+  return row ? { last_from: row.dataset.from, last_ts: row.dataset.ts } : {};
+}
+
 document.addEventListener("alpine:init", () => {
   Alpine.data("im", (sel) => ({
     sel, pane: sel ? "chat" : "list", filter: "", unreadOnly: false,
@@ -13,6 +20,13 @@ document.addEventListener("alpine:init", () => {
       this.$el.addEventListener("im-back", () => { this.pane = "list"; });
     },
     open(id) { this.sel = id; this.pane = "chat"; },
+    hotkey(e) {
+      // code, а не key: в русской раскладке key — «л»
+      if (!(e.ctrlKey || e.metaKey) || e.code !== "KeyK") return;
+      e.preventDefault();
+      this.pane = "list";
+      this.$nextTick(() => this.$refs.search.focus());
+    },
     matches(li) {
       const byTitle = !this.filter || li.dataset.title.includes(this.filter.toLowerCase());
       const byUnread = !this.unreadOnly || Number(li.dataset.unread) > 0;
@@ -39,7 +53,10 @@ document.addEventListener("alpine:init", () => {
         if (state) this.outRead = Number(state.dataset.outRead);
         const target = e.detail.target;
         if (target.id === "messages") this.settleMessages();
-        if (target.classList.contains("im-more")) this.$refs.list.scrollTop = this.$refs.list.scrollHeight - this.fromBottom;
+        if (target.classList.contains("im-more")) {
+          this.dedupeDays();
+          this.$refs.list.scrollTop = this.$refs.list.scrollHeight - this.fromBottom;
+        }
       });
       this.$nextTick(() => this.markRead());
     },
@@ -50,6 +67,7 @@ document.addEventListener("alpine:init", () => {
       queueMicrotask(() => {
         this.settling = false;
         this.dedupe();
+        if (this.$refs.list.querySelector("[data-id]")) this.$refs.list.querySelector(".im-empty")?.remove();
         if (this.stick) this.scrollBottom();
         this.markRead();
       });
@@ -60,6 +78,14 @@ document.addEventListener("alpine:init", () => {
       this.$refs.list.querySelectorAll("[data-id]").forEach((el) => {
         if (seen.has(el.dataset.id)) el.remove();
         else seen.add(el.dataset.id);
+      });
+    },
+    // страница старых заканчивается чипом того же дня, с которого начиналась лента
+    dedupeDays() {
+      let prev = null;
+      this.$refs.list.querySelectorAll(".im-day").forEach((chip) => {
+        if (chip.textContent === prev) chip.remove();
+        else prev = chip.textContent;
       });
     },
     markRead() {
@@ -74,6 +100,16 @@ document.addEventListener("alpine:init", () => {
       return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     },
     scrollBottom() { this.$refs.list.scrollTop = this.$refs.list.scrollHeight; },
+  }));
+
+  Alpine.data("readMark", () => ({
+    silent: !readOnOpen(),
+    toggle(on) {
+      this.silent = on;
+      try {
+        localStorage.setItem("im.readOnOpen", on ? "off" : "on");
+      } catch {}
+    },
   }));
 
   Alpine.data("composer", () => ({

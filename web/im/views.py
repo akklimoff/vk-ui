@@ -231,10 +231,10 @@ def day_label(ts: float, now: float, tz: ZoneInfo) -> str:
     return label if day.year == today.year else f"{label} {day.year}"
 
 
-def rows(messages: list[Message], now: float, tz: ZoneInfo) -> list[Row]:
+def rows(messages: list[Message], now: float, tz: ZoneInfo, prev: Message | None = None) -> list[Row]:
+    """prev — последнее уже отрисованное сообщение: с ним склеивается серия и день первого нового."""
     result: list[Row] = []
-    prev: Message | None = None
-    prev_day = None
+    prev_day = day_label(prev.ts, now, tz) if prev else None
     for m in messages:
         day = day_label(m.ts, now, tz)
         new_day = day != prev_day

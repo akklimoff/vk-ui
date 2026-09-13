@@ -12,6 +12,8 @@
     <label class="switch-row"><input type="checkbox" role="switch" name="on" value="1" {{ 'checked' if value }}>
       <span>{{ title }}<small class="muted">{{ hint }}</small></span></label>
   </form>{% endif %}{% endfor %}
+  <label class="switch-row" x-data="readMark"><input type="checkbox" role="switch" :checked="silent" @change="toggle($event.target.checked)">
+    <span>Читать без отметки<small class="muted">VK не увидит, что сообщения прочитаны; во всех чатах этого браузера</small></span></label>
   <form hx-post="/im/{{ peer_id }}/bot/personas" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
     <label>Персоны для этого чата <small>пусто — активная «{{ active or 'по умолчанию' }}»; несколько — случайная на каждый ответ</small></label>
     <div class="persona-list">{% for p in personas %}

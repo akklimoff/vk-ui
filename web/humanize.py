@@ -35,3 +35,12 @@ def clock(ts: float, tz) -> str:
 
 def mmss(seconds: int) -> str:
     return f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
+
+
+def plural(n: int, one: str, few: str, many: str) -> str:
+    tail = n % 100
+    if 11 <= tail <= 14:
+        form = many
+    else:
+        form = {1: one, 2: few, 3: few, 4: few}.get(n % 10, many)
+    return f"{n} {form}"

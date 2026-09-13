@@ -33,6 +33,7 @@ def test_panel_shows_mode_members_and_switches(client):
     assert "Вася Пупкин" in r.text and "Аня Иванова" in r.text        # участники
     assert "Валентина Тина" not in r.text.split("Участники")[1]         # себя в списке нет
     assert "Рина" in r.text and "Моника" in r.text                      # персоны
+    assert "Читать без отметки" in r.text
 
 
 def test_switch_auto_in_chat_writes_access_and_updates_badge(client, settings):

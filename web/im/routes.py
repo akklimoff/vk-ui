@@ -12,7 +12,7 @@ from web.im.controls import set_keyed_text, set_member, set_paused_peer, set_pee
 from web.im.draft import draft_reply
 from web.im.marks import bot_marks
 from web.im.modes import bot_mode, chat_controls
-from web.im.views import Profiles, is_chat, parse_conversations, parse_history, peer_of, rows
+from web.im.views import Message, Profiles, is_chat, parse_conversations, parse_history, peer_of, rows
 from web.im.voice import MAX_VOICE_BYTES, prepare_voice
 from web.render import is_hx
 from web.services import access_raw, load_runtime_dict
@@ -50,15 +50,22 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
         dialogs = parse_conversations(vk().conversations(DIALOGS), vk().me_id, marks())
         return {"dialogs": [(d, bot_mode(d.peer.id, access, rt)) for d in dialogs], "tz": tz}
 
-    def chat_ctx(peer_id: int, before: int | None = None, after: int | None = None):
-        raw = vk().history_page(peer_id, POLL_WINDOW if after else PAGE, before_id=before)
+    def rendered_tail(last_from: int | None, last_ts: float | None) -> Message | None:
+        if last_from is None or last_ts is None:
+            return None
+        return Message(0, last_ts, last_from, "", "", "", False, False)
+
+    def chat_ctx(peer_id: int, before: int | None = None, after: int | None = None, prev: Message | None = None):
+        count = POLL_WINDOW if after else PAGE
+        raw = vk().history_page(peer_id, count, before_id=before)
         messages, out_read = parse_history(raw, vk().me_id, marks())
+        full_page = len(messages) >= count
         if after:
             messages = [m for m in messages if m.id > after]
         convs = raw.get("conversations") or []
         peer = peer_of(convs[0], Profiles(raw)) if convs else None
-        return {"peer": peer, "peer_id": peer_id, "rows": rows(messages, time.time(), tz),
-                "out_read": out_read, "oldest": messages[0].id if messages else None,
+        return {"peer": peer, "peer_id": peer_id, "rows": rows(messages, time.time(), tz, prev),
+                "out_read": out_read, "oldest": messages[0].id if messages and full_page else None,
                 "newest": messages[-1].id if messages else (after or 0),
                 "mode": bot_mode(peer_id, lists(), runtime()), "tz": tz, "page": "im"}
 
@@ -68,10 +75,10 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
         except Exception as e:
             raise HTTPException(502, f"VK: {safe_error(e)}")
 
-    def sent_ctx(peer_id: int, message_id: int):
+    def sent_ctx(peer_id: int, message_id: int, prev: Message | None):
         raw = vk().messages_by_id([message_id])
         messages, out_read = parse_history(raw, vk().me_id, marks())
-        return {"peer_id": peer_id, "rows": rows(messages, time.time(), tz), "out_read": out_read,
+        return {"peer_id": peer_id, "rows": rows(messages, time.time(), tz, prev), "out_read": out_read,
                 "newest": message_id, "oldest": None, "tz": tz}
 
     def send_form_error(request: Request, error: str):
@@ -89,8 +96,10 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
         return render.partial(request, "im_dialogs", {"page": "im", **guard(dialogs_ctx)})
 
     @router.get("/im/{peer_id}/messages")
-    def messages_partial(request: Request, peer_id: int, after: int | None = None, before: int | None = None):
-        ctx = guard(lambda: chat_ctx(peer_id, before=before, after=after))
+    def messages_partial(request: Request, peer_id: int, after: int | None = None, before: int | None = None,
+                         last_from: int | None = None, last_ts: float | None = None):
+        prev = rendered_tail(last_from, last_ts) if after is not None else None
+        ctx = guard(lambda: chat_ctx(peer_id, before=before, after=after, prev=prev))
         return render.partial(request, "im_rows_page", {"chat": ctx, "after": after, "before": before, "page": "im"})
 
     @router.get("/im/{peer_id}")
@@ -102,7 +111,8 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
 
     @router.post("/im/{peer_id}/send")
     def send_message(request: Request, peer_id: int, text: str = Form(""), reply_to: str = Form(""),
-                     voice: UploadFile | None = File(None)):
+                     voice: UploadFile | None = File(None), last_from: int | None = Form(None),
+                     last_ts: float | None = Form(None)):
         text = text.strip()
         # на байт больше лимита — чтобы sniff_voice увидел превышение, не читая гигабайты
         data = voice.file.read(MAX_VOICE_BYTES + 1) if voice is not None and voice.filename else b""
@@ -119,7 +129,7 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
             return send_form_error(request, f"VK не принял голосовое: {safe_error(e)}")
         try:
             message_id = vk().send(peer_id, text, reply_to=reply_id, attachment=attachment)
-            ctx = sent_ctx(peer_id, message_id)
+            ctx = sent_ctx(peer_id, message_id, rendered_tail(last_from, last_ts))
         except Exception as e:
             return send_form_error(request, f"VK не отправил: {safe_error(e)}")
         if not is_hx(request):

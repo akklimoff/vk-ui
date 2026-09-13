@@ -128,7 +128,17 @@ def test_older_page_replaces_sentinel(client):
     r = client.get(f"/im/{PEER_CHAT}/messages?before=499", auth=AUTH, headers={"HX-Request": "true"})
     assert r.status_code == 200
     assert client.app.state.vk.calls[-1] == ("history", PEER_CHAT, 40, 499)
-    assert 'class="im-more"' in r.text and "before=499" in r.text   # фикстура отдаёт те же id — сентинел на самый старый
+    assert 'class="im-more"' not in r.text                         # страница неполная — старее ничего нет
+
+
+def test_full_page_keeps_sentinel_on_oldest(client):
+    full = {**HISTORY, "items": [{**HISTORY["items"][1], "id": 600 - i} for i in range(40)]}
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.history_page = lambda *a, **k: full
+    r = client.get(f"/im/{PEER_CHAT}/messages?before=600", auth=AUTH, headers={"HX-Request": "true"})
+    assert 'class="im-more"' in r.text and "before=561" in r.text
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    assert 'class="im-more"' in r.text
 
 
 def test_send_text_appends_sent_message(client):
@@ -202,3 +212,28 @@ def test_draft_route_returns_plain_text_and_sends_nothing(client):
     assert r.status_code == 200 and r.text == "черновик от llm"
     assert r.headers["content-type"].startswith("text/plain")
     assert "send" not in [c[0] for c in client.app.state.vk.calls]
+
+
+def test_poll_continues_series_of_same_author(client):
+    r = client.get(f"/im/{PEER_CHAT}/messages?after=501&last_from=11&last_ts=1788876200", auth=AUTH, headers={"HX-Request": "true"})
+    assert 'class="msg  "' in r.text or 'class="msg "' in r.text        # 502 от Васи без head
+    r = client.get(f"/im/{PEER_CHAT}/messages?after=501&last_from=1&last_ts=1788876200", auth=AUTH, headers={"HX-Request": "true"})
+    assert 'class="msg head' in r.text
+
+
+def test_poll_skips_day_chip_when_day_continues(client):
+    r = client.get(f"/im/{PEER_CHAT}/messages?after=501&last_from=1&last_ts=1788876200", auth=AUTH, headers={"HX-Request": "true"})
+    assert 'class="im-day"' not in r.text
+
+
+def test_sent_message_continues_own_series(client):
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "ещё", "last_from": "1", "last_ts": "1788876290"},
+                    auth=AUTH, headers={"HX-Request": "true"})
+    assert 'class="msg  out"' in r.text and 'class="im-day"' not in r.text
+
+
+def test_empty_chat_shows_placeholder(client):
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.history_page = lambda *a, **k: {"items": [], "profiles": [], "groups": [], "conversations": []}
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    assert "Сообщений пока нет" in r.text

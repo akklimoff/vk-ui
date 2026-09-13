@@ -1,8 +1,8 @@
-<div class="im" x-data="im({{ sel or 'null' }})" :class="{ 'show-chat': pane === 'chat' }">
+<div class="im" x-data="im({{ sel or 'null' }})" :class="{ 'show-chat': pane === 'chat' }" @keydown.window="hotkey($event)">
   <aside class="im-side">
     <header class="im-side-head">
       <b>Мессенджер</b>
-      <input type="search" placeholder="Поиск" x-model="filter" aria-label="Поиск по диалогам">
+      <input type="search" placeholder="Поиск" x-model="filter" x-ref="search" aria-label="Поиск по диалогам">
       <label class="im-unread-toggle"><input type="checkbox" role="switch" x-model="unreadOnly"> Только непрочитанные</label>
     </header>
     <div id="dialogs" class="im-dialogs">

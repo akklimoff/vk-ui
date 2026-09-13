@@ -11,7 +11,7 @@ from bot.llm import LlmClient, available_models, secrets_of
 from bot.status import ReplyLog, write_json_atomic
 from bot.vk import VkClient
 from web.auth import make_guard
-from web.humanize import clock, mmss
+from web.humanize import clock, mmss, plural
 from web.im.routes import create_router
 from web.im.views import preview
 from bot.personas import list_personas, load_persona
@@ -33,7 +33,7 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
     app = FastAPI(dependencies=[Depends(guard)])
     app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
     render = Renderer(os.path.join(HERE, "templates"), peer_label=peer_label, peer_link=peer_link,
-                      model_label=model_label, clock=clock, mmss=mmss, preview=preview)
+                      model_label=model_label, clock=clock, mmss=mmss, plural=plural, preview=preview)
     app.state.vk = None
     app.state.llm = None
 
