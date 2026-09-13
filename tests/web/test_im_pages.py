@@ -315,3 +315,13 @@ def test_photo_opens_in_viewer(client):
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
     assert """@click.prevent='viewer = "https://cdn.example/p_w.jpg"'""" in r.text
     assert 'class="im-viewer"' in r.text
+
+
+def test_voice_player_renders_wave_bars_and_transcript_toggle(client):
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    voice = r.text.split('class="voice"')[1].split("</article>")[0]
+    assert voice.count('rx="1"') == 60                       # 20 с → 60 столбиков
+    assert 'id="w500-1"' in voice and 'clip-path="url(#w500-1c)"' in voice
+    assert "vk-icons.svg#play_circle_32" in voice and "vk-icons.svg#pause_circle_32" in voice
+    assert 'class="aa"' in voice and "после смены выкину</p>" in voice
+    assert "<audio" not in voice and "0:20" in voice

@@ -14,6 +14,11 @@ function lastRendered() {
   return row ? { after: row.dataset.id, last_from: row.dataset.from, last_ts: row.dataset.ts } : { after: 0 };
 }
 
+function mmss(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 document.addEventListener("alpine:init", () => {
   Alpine.data("im", (sel) => ({
     sel, pane: sel ? "chat" : "list", filter: "", unreadOnly: false,
@@ -111,7 +116,33 @@ document.addEventListener("alpine:init", () => {
     onScroll() {},
   }));
 
-  Alpine.data("voice", () => ({}));
+  Alpine.data("voice", (url, duration) => ({
+    playing: false, pos: 0, open: false, audio: null,
+    get pct() { return duration ? Math.min(100, (this.pos / duration) * 100) : 0; },
+    get time() { return mmss(this.playing || this.pos ? this.pos : duration); },
+    ensure() {
+      if (this.audio) return;
+      this.audio = new Audio(url);
+      this.audio.preload = "none";
+      this.audio.addEventListener("timeupdate", () => { this.pos = this.audio.currentTime; });
+      this.audio.addEventListener("ended", () => { this.playing = false; this.pos = 0; });
+      this.audio.addEventListener("error", () => { this.playing = false; toast("Не удалось загрузить голосовое", "bad"); });
+    },
+    toggle() { this.playing ? this.pause() : this.play(); },
+    play() {
+      this.ensure();
+      window.dispatchEvent(new CustomEvent("im-voice-play", { detail: this.$el }));
+      this.audio.play();
+      this.playing = true;
+    },
+    pause() { this.audio?.pause(); this.playing = false; },
+    seek(e) {
+      const box = e.currentTarget.getBoundingClientRect();
+      this.ensure();
+      this.audio.currentTime = this.pos = ((e.clientX - box.left) / box.width) * duration;
+      if (!this.playing) this.play();
+    },
+  }));
 
   Alpine.data("readMark", () => ({
     silent: !readOnOpen(),
