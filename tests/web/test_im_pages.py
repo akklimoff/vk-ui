@@ -71,7 +71,7 @@ def test_im_page_lists_dialogs_with_modes(client):
     assert r.status_code == 200
     assert "лампочки" in r.text and "Аня Иванова" in r.text
     assert "Стикер" in r.text                       # превью последнего сообщения
-    assert 'class="unread">2<' in r.text
+    assert 'class="unread quiet">2<' in r.text          # беседа в фикстуре без звука
     assert r.text.count("по тегу") >= 2              # бейдж режима у каждого диалога
     assert 'href="/im"' in r.text and "Мессенджер" in r.text
 
@@ -266,3 +266,17 @@ def test_im_page_wears_the_vk_shell(client):
 def test_other_pages_keep_the_plain_nav(client):
     r = client.get("/", auth=AUTH)
     assert 'class="topnav"' in r.text and "vk-nav" not in r.text and 'href="/im"' in r.text
+
+
+def test_dialog_rows_show_mute_icon_ticks_and_short_age(client):
+    r = client.get("/im/dialogs", auth=AUTH, headers={"HX-Request": "true"})
+    chat, user = r.text.split("<li")[1:]
+    assert "vk-icons.svg#mute_cross_16" in chat and "vk-icons.svg#pin_16" in chat
+    assert 'class="att">Стикер' in chat and "Вася:" in chat
+    assert "vk-icons.svg#check_outline_16" in user and "Вы:" in user     # своё, непрочитанное — одна галочка
+    assert '<span class="when"> · ' in user and "pinned-last" in chat and "pinned-last" not in user
+
+
+def test_empty_state_template_is_on_the_page(client):
+    r = client.get("/im", auth=AUTH)
+    assert r.text.count("Выберите чат") == 2 and '<template id="im-empty">' in r.text

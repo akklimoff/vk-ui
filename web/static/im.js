@@ -19,8 +19,15 @@ document.addEventListener("alpine:init", () => {
     sel, pane: sel ? "chat" : "list", filter: "", unreadOnly: false,
     init() {
       this.$el.addEventListener("im-back", () => { this.pane = "list"; });
+      this.$el.addEventListener("im-close", () => this.close());
     },
     open(id) { this.sel = id; this.pane = "chat"; },
+    close() {
+      this.sel = null;
+      this.pane = "list";
+      document.getElementById("chat").innerHTML = document.getElementById("im-empty").innerHTML;
+      history.pushState({}, "", "/im");
+    },
     hotkey(e) {
       // code, а не key: в русской раскладке key — «л»
       if (!(e.ctrlKey || e.metaKey) || e.code !== "KeyK") return;
