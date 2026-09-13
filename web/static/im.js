@@ -145,6 +145,34 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 
+  Alpine.data("voice", (url, duration) => ({
+    playing: false, pos: 0, open: false, audio: null,
+    get pct() { return duration ? Math.min(100, (this.pos / duration) * 100) : 0; },
+    get time() { return mmss(this.playing || this.pos ? this.pos : duration); },
+    ensure() {
+      if (this.audio) return;
+      this.audio = new Audio(url);
+      this.audio.preload = "none";
+      this.audio.addEventListener("timeupdate", () => { this.pos = this.audio.currentTime; });
+      this.audio.addEventListener("ended", () => { this.playing = false; this.pos = 0; });
+      this.audio.addEventListener("error", () => { this.playing = false; toast("Не удалось загрузить голосовое", "bad"); });
+    },
+    toggle() { this.playing ? this.pause() : this.play(); },
+    play() {
+      this.ensure();
+      window.dispatchEvent(new CustomEvent("im-voice-play", { detail: this.$el }));
+      this.audio.play();
+      this.playing = true;
+    },
+    pause() { this.audio?.pause(); this.playing = false; },
+    seek(e) {
+      const box = e.currentTarget.getBoundingClientRect();
+      this.ensure();
+      this.audio.currentTime = this.pos = ((e.clientX - box.left) / box.width) * duration;
+      if (!this.playing) this.play();
+    },
+  }));
+
   Alpine.data("readMark", () => ({
     silent: !readOnOpen(),
     toggle(on) {

@@ -30,6 +30,7 @@ body.page-im {
 }
 .page-im a { color: var(--vk-link); text-decoration: none; }
 .page-im p { margin: 0; }
+.page-im p, .page-im ul, .page-im blockquote { color: inherit; }
 .page-im .ico { display: inline-block; flex: 0 0 auto; fill: currentColor; vertical-align: middle; }
 .page-im .ib { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; margin: 0; border: 0; border-radius: 6px;
   background: none; color: var(--vk-icon-2); box-shadow: none; cursor: pointer; text-decoration: none; }
@@ -41,12 +42,12 @@ body.page-im {
   padding: 0 max(32px, calc((100% - 1092px) / 2)); background: var(--vk-header); border-bottom: 1px solid var(--vk-sep); }
 .vk-logo { display: flex; align-items: center; gap: 8px; color: var(--vk-text); font-size: 15px; font-weight: 600; }
 .vk-logo-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--vk-accent); color: #fff; }
-.vk-burger { display: none; color: var(--vk-icon); }
+.page-im .vk-burger { display: none; color: var(--vk-icon); }
 .vk-scrim { position: fixed; inset: 0; z-index: 25; background: rgba(0,0,0,.4); }
-.vk-nav { grid-column: 2; grid-row: 2; align-self: start; position: sticky; top: 64px; margin-top: 16px; }
-.vk-nav ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.vk-nav { grid-column: 2; grid-row: 2; align-self: start; position: sticky; top: 64px; margin-top: 16px; display: block; }
+.page-im .vk-nav ul { display: flex; flex-direction: column; align-items: stretch; margin: 0; padding: 0; list-style: none; }
 .vk-nav li { margin: 0; padding: 0; }
-.vk-nav a { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 6px; border-radius: 4px; color: var(--vk-text); font-size: 13px; line-height: 16px; }
+.vk-nav a { display: flex; align-items: center; gap: 10px; height: 30px; margin: 0; padding: 0 6px; border-radius: 4px; color: var(--vk-text); font-size: 13px; line-height: 16px; }
 .vk-nav a .ico { color: var(--vk-accent); }
 .vk-nav a:hover { background: var(--vk-hover); }
 .vk-nav a[aria-current] { background: var(--vk-active); }
@@ -91,15 +92,15 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
   height: 60px; padding: 6px 12px; border-radius: 8px; color: inherit; }
 .dlg a:hover { background: var(--vk-hover); }
 .dlg.active a { background: var(--vk-active); }
-.dlg .ava { grid-row: 1 / 3; margin-right: 12px; }
-.dlg-head { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 13px; line-height: 16px; font-weight: 500; }
+.dlg .ava { grid-area: 1 / 1 / 3 / 2; margin-right: 12px; }
+.dlg-head { grid-area: 1 / 2 / 2 / 3; display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 13px; line-height: 16px; font-weight: 500; }
 .dlg-head .title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .dlg-head .mute { color: var(--vk-icon-3); }
-.dlg-msg { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--vk-subhead); font-size: 13px; line-height: 18px; }
+.dlg-msg { grid-area: 2 / 2 / 3 / 3; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--vk-subhead); font-size: 13px; line-height: 18px; }
 .dlg-msg .who { color: var(--vk-text-2); }
 .dlg-msg .att { color: var(--vk-link); }
 .dlg-msg .when { color: var(--vk-text-3); }
-.dlg-icons { grid-row: 1 / 3; display: flex; align-items: center; gap: 4px; height: 22px; margin-left: 8px; color: var(--vk-icon-3); }
+.dlg-icons { grid-area: 1 / 3 / 3 / 4; display: flex; align-items: center; gap: 4px; height: 22px; margin-left: 8px; color: var(--vk-icon-3); }
 .dlg-icons .ticks { color: var(--vk-accent); }
 .unread { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--vk-accent);
   color: #fff; font-size: 12px; line-height: 14px; font-weight: 500; }
@@ -236,7 +237,7 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
 @media (max-width: 767px) {
   body.page-im { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
   .vk-header { grid-column: 1; padding: 0 8px; }
-  .vk-burger { display: inline-grid; }
+  .page-im .vk-burger { display: inline-grid; }
   .vk-nav { position: fixed; top: 0; left: 0; bottom: 0; z-index: 30; grid-column: auto; grid-row: auto; width: 240px; margin: 0; padding: 56px 8px 8px;
     background: var(--vk-content); transform: translateX(-100%); transition: transform .2s; }
   .vk-nav.open { transform: none; }
