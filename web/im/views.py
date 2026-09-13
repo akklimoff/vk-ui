@@ -25,6 +25,8 @@ class Peer:
     kind: str = "user"
     online: bool = False
     members: int = 0
+    last_seen: float = 0
+    sex: int = 0
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,7 @@ class Attachment:
     title: str = ""
     duration: int = 0
     transcript: str = ""
+    waveform: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,7 @@ class Row:
     message: Message
     day: str | None
     head: bool
+    unread: bool = False
 
 
 @dataclass(frozen=True)
@@ -101,6 +105,12 @@ class Profiles:
     def online(self, uid: int) -> bool:
         return bool((self._users.get(uid) or {}).get("online"))
 
+    def last_seen(self, uid: int) -> float:
+        return float(((self._users.get(uid) or {}).get("last_seen") or {}).get("time", 0))
+
+    def sex(self, uid: int) -> int:
+        return int((self._users.get(uid) or {}).get("sex", 0))
+
 
 def attachment_of(att: dict) -> Attachment:
     kind = att.get("type", "")
@@ -119,7 +129,8 @@ def attachment_of(att: dict) -> Attachment:
         done = body.get("transcript_state") == "done"
         return Attachment("voice", url=body.get("link_mp3") or body.get("link_ogg", ""),
                           duration=int(body.get("duration", 0)),
-                          transcript=body.get("transcript", "") if done else "")
+                          transcript=body.get("transcript", "") if done else "",
+                          waveform=tuple(int(v) for v in body.get("waveform") or ()))
     if kind == "doc":
         return Attachment("doc", url=body.get("url", ""), title=body.get("title") or "документ")
     if kind == "video":
@@ -193,7 +204,10 @@ def peer_of(conv: dict, profiles: Profiles) -> Peer:
         cs = conv.get("chat_settings") or {}
         return Peer(pid, cs.get("title") or f"беседа {peer.get('local_id', pid)}",
                     (cs.get("photo") or {}).get("photo_50", ""), "chat", False, int(cs.get("members_count", 0)))
-    return Peer(pid, profiles.name(pid), profiles.photo(pid), "group" if pid < 0 else "user", profiles.online(pid))
+    if pid < 0:
+        return Peer(pid, profiles.name(pid), profiles.photo(pid), "group")
+    return Peer(pid, profiles.name(pid), profiles.photo(pid), "user", profiles.online(pid),
+                last_seen=profiles.last_seen(pid), sex=profiles.sex(pid))
 
 
 def parse_conversations(raw: dict, me_id: int, marks: dict | None = None) -> list[Dialog]:
@@ -231,14 +245,52 @@ def day_label(ts: float, now: float, tz: ZoneInfo) -> str:
     return label if day.year == today.year else f"{label} {day.year}"
 
 
-def rows(messages: list[Message], now: float, tz: ZoneInfo, prev: Message | None = None) -> list[Row]:
-    """prev — последнее уже отрисованное сообщение: с ним склеивается серия и день первого нового."""
+WAVE_HEIGHT = 12
+WAVE_MAX = 31
+
+
+def wave_bars(waveform: tuple[int, ...], duration: int) -> tuple[int, ...]:
+    """Столбики как у VK: секундное сообщение — 22, длиннее 80 не бывает; значения VK 0…31."""
+    n = max(21, min(80, round(duration * 2) + 20))
+    if not waveform:
+        return (2,) * n
+    bars = []
+    for i in range(n):
+        lo = i * len(waveform) // n
+        hi = max((i + 1) * len(waveform) // n, lo + 1)
+        chunk = waveform[lo:hi]
+        bars.append(max(2, round(sum(chunk) / len(chunk) / WAVE_MAX * WAVE_HEIGHT)))
+    return tuple(bars)
+
+
+def presence(peer: Peer, now: float, tz: ZoneInfo) -> str:
+    if peer.online:
+        return "онлайн"
+    if not peer.last_seen:
+        return ""
+    was = {1: "была в сети", 2: "был в сети"}.get(peer.sex, "был(а) в сети")
+    ago = now - peer.last_seen
+    if ago < 60:
+        return f"{was} только что"
+    if ago < 3600:
+        return f"{was} {int(ago // 60)} мин назад"
+    at = datetime.fromtimestamp(peer.last_seen, tz)
+    return f"{was} {day_label(peer.last_seen, now, tz)} в {at:%H:%M}"
+
+
+def rows(messages: list[Message], now: float, tz: ZoneInfo, prev: Message | None = None,
+         in_read: int | None = None) -> list[Row]:
+    """prev — последнее уже отрисованное сообщение: с ним склеивается серия и день первого нового.
+    in_read — последнее прочитанное входящее: перед первым входящим новее него встаёт разделитель."""
     result: list[Row] = []
     prev_day = day_label(prev.ts, now, tz) if prev else None
+    unread_pending = in_read is not None
     for m in messages:
         day = day_label(m.ts, now, tz)
         new_day = day != prev_day
         head = new_day or prev is None or prev.from_id != m.from_id or m.ts - prev.ts > SERIES_GAP or bool(prev.action)
-        result.append(Row(m, day if new_day else None, head or bool(m.action)))
+        unread = unread_pending and not m.out and m.id > in_read
+        unread_pending = unread_pending and not unread
+        result.append(Row(m, day if new_day else None, head or bool(m.action), unread))
         prev, prev_day = m, day
     return result
