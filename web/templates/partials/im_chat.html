@@ -39,7 +39,7 @@
     </div>
   </form>
   <div id="chat-state" data-out-read="{{ c.out_read }}" hidden></div>
-  <div id="chat-poll" hx-get="/im/{{ c.peer_id }}/messages?after={{ c.newest }}"
+  <div id="chat-poll" hx-get="/im/{{ c.peer_id }}/messages"
        hx-trigger="every 3s [document.visibilityState === 'visible']" hx-target="#messages" hx-swap="beforeend"
      hx-vals='js:{...lastRendered()}'></div>
 </div>

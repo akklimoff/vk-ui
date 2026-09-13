@@ -80,3 +80,9 @@ def test_member_block_in_chat(client, settings):
     assert access(settings)["peer_blocked_users"] == {str(PEER_CHAT): [11]}
     r = client.get(f"/im/{PEER_CHAT}/bot", auth=AUTH, headers=HX)
     assert "checked" in r.text.split("Вася Пупкин")[1].split("</li>")[0]
+
+
+def test_bot_forms_without_htmx_redirect_to_chat(client, settings):
+    r = client.post(f"/im/{PEER_CHAT}/bot/paused", data={"on": "1"}, auth=AUTH, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/im?sel={PEER_CHAT}"
+    assert client.get(f"/im/{PEER_CHAT}/bot", auth=AUTH, follow_redirects=False).status_code == 303

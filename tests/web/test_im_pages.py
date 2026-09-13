@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -11,6 +13,7 @@ class FakeVk:
 
     def __init__(self, token):
         self.calls = []
+        self.sent = False
 
     def conversations(self, count=60, offset=0):
         self.calls.append(("conversations", count, offset))
@@ -18,17 +21,14 @@ class FakeVk:
 
     def history_page(self, peer_id, count, before_id=None):
         self.calls.append(("history", peer_id, count, before_id))
-        return HISTORY
+        return {**HISTORY, "items": SENT["items"] + HISTORY["items"]} if self.sent else HISTORY
 
     def members(self, peer_id):
         return MEMBERS
 
-    def messages_by_id(self, ids):
-        self.calls.append(("by_id", tuple(ids)))
-        return SENT
-
     def send(self, peer_id, text="", reply_to=None, attachment=""):
         self.calls.append(("send", peer_id, text, reply_to, attachment))
+        self.sent = True
         return 503
 
     def mark_read(self, peer_id):
@@ -115,13 +115,12 @@ def test_poll_returns_only_newer_rows_and_moves_cursor(client):
     r = client.get(f"/im/{PEER_CHAT}/messages?after=500", auth=AUTH, headers={"HX-Request": "true"})
     assert r.status_code == 200
     assert 'data-id="501"' in r.text and 'data-id="502"' in r.text and 'data-id="500"' not in r.text
-    assert 'id="chat-poll"' in r.text and "after=502" in r.text and 'hx-swap-oob="true"' in r.text
     assert 'id="chat-state"' in r.text and 'data-out-read="501"' in r.text
 
 
-def test_poll_without_news_is_empty_but_keeps_cursor(client):
+def test_poll_without_news_is_empty(client):
     r = client.get(f"/im/{PEER_CHAT}/messages?after=502", auth=AUTH, headers={"HX-Request": "true"})
-    assert r.status_code == 200 and "<article" not in r.text and "after=502" in r.text
+    assert r.status_code == 200 and "<article" not in r.text
 
 
 def test_older_page_replaces_sentinel(client):
@@ -142,14 +141,19 @@ def test_full_page_keeps_sentinel_on_oldest(client):
 
 
 def test_send_text_appends_sent_message(client):
-    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "привет из админки", "reply_to": "500"},
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "привет из админки", "reply_to": "500", "after": "502"},
                     auth=AUTH, headers={"HX-Request": "true"})
     assert r.status_code == 200
     vk = client.app.state.vk
     assert ("send", PEER_CHAT, "привет из админки", 500, "") in vk.calls
-    assert ("by_id", (503,)) in vk.calls
-    assert 'data-id="503"' in r.text and "привет из админки" in r.text
-    assert "after=503" in r.text                    # курсор поллинга сдвинут, чтобы не продублировать
+    assert 'data-id="503"' in r.text and "привет из админки" in r.text and 'data-id="502"' not in r.text
+
+
+def test_send_also_renders_messages_that_arrived_since_last_render(client):
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "привет из админки", "after": "500"},
+                    auth=AUTH, headers={"HX-Request": "true"})
+    assert r.text.index('data-id="501"') < r.text.index('data-id="502"') < r.text.index('data-id="503"')
+    assert 'data-out-read="501"' in r.text
 
 
 def test_send_empty_is_422(client):
@@ -227,7 +231,7 @@ def test_poll_skips_day_chip_when_day_continues(client):
 
 
 def test_sent_message_continues_own_series(client):
-    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "ещё", "last_from": "1", "last_ts": "1788876290"},
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "ещё", "after": "502", "last_from": "1", "last_ts": "1788876290"},
                     auth=AUTH, headers={"HX-Request": "true"})
     assert 'class="msg  out"' in r.text and 'class="im-day"' not in r.text
 
@@ -237,3 +241,14 @@ def test_empty_chat_shows_placeholder(client):
     client.app.state.vk.history_page = lambda *a, **k: {"items": [], "profiles": [], "groups": [], "conversations": []}
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
     assert "Сообщений пока нет" in r.text
+
+
+def test_send_counts_as_sent_when_only_rendering_fails(client):
+    client.app.state.vk = FakeVk("t")
+
+    def rate_limited(*a, **k):
+        raise RuntimeError("[6] Too many requests per second")
+
+    client.app.state.vk.history_page = rate_limited
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "ещё", "after": "502"}, auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200 and json.loads(r.headers["HX-Trigger"])["toast"] == "Отправлено" and "<article" not in r.text

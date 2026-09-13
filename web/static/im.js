@@ -6,11 +6,12 @@ function readOnOpen() {
   }
 }
 
-// для hx-vals поллера и отправки: сервер склеивает серию и день с последним отрисованным рядом
+// для hx-vals поллера и отправки: курсор — последний отрисованный ряд, а не число с сервера,
+// так запоздавший ответ не сдвинет его ни назад, ни вперёд; с этим же рядом сервер склеивает серию и день
 function lastRendered() {
   let row = document.getElementById("messages")?.lastElementChild;
   while (row && !row.dataset.ts) row = row.previousElementSibling;
-  return row ? { last_from: row.dataset.from, last_ts: row.dataset.ts } : {};
+  return row ? { after: row.dataset.id, last_from: row.dataset.from, last_ts: row.dataset.ts } : { after: 0 };
 }
 
 document.addEventListener("alpine:init", () => {

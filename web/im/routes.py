@@ -1,3 +1,4 @@
+import json
 import time
 from zoneinfo import ZoneInfo
 
@@ -66,7 +67,6 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
         peer = peer_of(convs[0], Profiles(raw)) if convs else None
         return {"peer": peer, "peer_id": peer_id, "rows": rows(messages, time.time(), tz, prev),
                 "out_read": out_read, "oldest": messages[0].id if messages and full_page else None,
-                "newest": messages[-1].id if messages else (after or 0),
                 "mode": bot_mode(peer_id, lists(), runtime()), "tz": tz, "page": "im"}
 
     def guard(call):
@@ -74,12 +74,6 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
             return call()
         except Exception as e:
             raise HTTPException(502, f"VK: {safe_error(e)}")
-
-    def sent_ctx(peer_id: int, message_id: int, prev: Message | None):
-        raw = vk().messages_by_id([message_id])
-        messages, out_read = parse_history(raw, vk().me_id, marks())
-        return {"peer_id": peer_id, "rows": rows(messages, time.time(), tz, prev), "out_read": out_read,
-                "newest": message_id, "oldest": None, "tz": tz}
 
     def send_form_error(request: Request, error: str):
         return render.invalid(request, "im_error", {"page": "im"}, error)
@@ -111,8 +105,8 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
 
     @router.post("/im/{peer_id}/send")
     def send_message(request: Request, peer_id: int, text: str = Form(""), reply_to: str = Form(""),
-                     voice: UploadFile | None = File(None), last_from: int | None = Form(None),
-                     last_ts: float | None = Form(None)):
+                     voice: UploadFile | None = File(None), after: int = Form(0),
+                     last_from: int | None = Form(None), last_ts: float | None = Form(None)):
         text = text.strip()
         # на байт больше лимита — чтобы sniff_voice увидел превышение, не читая гигабайты
         data = voice.file.read(MAX_VOICE_BYTES + 1) if voice is not None and voice.filename else b""
@@ -128,13 +122,19 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
         except Exception as e:
             return send_form_error(request, f"VK не принял голосовое: {safe_error(e)}")
         try:
-            message_id = vk().send(peer_id, text, reply_to=reply_id, attachment=attachment)
-            ctx = sent_ctx(peer_id, message_id, rendered_tail(last_from, last_ts))
+            vk().send(peer_id, text, reply_to=reply_id, attachment=attachment)
         except Exception as e:
             return send_form_error(request, f"VK не отправил: {safe_error(e)}")
         if not is_hx(request):
             return RedirectResponse(f"/im?sel={peer_id}", status_code=303)
-        return render.partial(request, "im_rows_page", {"chat": ctx, "after": message_id, "before": None, "page": "im"},
+        # всё новое после отрисованного, а не только своё: иначе пришедшее перед отправкой
+        # оказалось бы выше курсора и не дорисовалось
+        try:
+            ctx = chat_ctx(peer_id, after=after, prev=rendered_tail(last_from, last_ts))
+        except Exception:
+            # сообщение уже ушло: композер очищается, чтобы его не отправили повторно, дорисует поллинг
+            return Response(headers={"HX-Trigger": json.dumps({"toast": "Отправлено"})})
+        return render.partial(request, "im_rows_page", {"chat": ctx, "after": after, "before": None, "page": "im"},
                               toast="Отправлено")
 
     @router.post("/im/{peer_id}/read")
@@ -165,6 +165,8 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
                 "active": rt.active_persona, "page": "im"}
 
     def bot_panel(request: Request, peer_id: int, toast: str | None = None):
+        if not is_hx(request):
+            return RedirectResponse(f"/im?sel={peer_id}", status_code=303)
         return render.partial(request, "im_bot", guard(lambda: bot_ctx(peer_id)), toast=toast)
 
     @router.get("/im/{peer_id}/bot")
