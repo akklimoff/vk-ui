@@ -21,7 +21,7 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("chat", (peerId, outRead) => ({
-    peerId, outRead, fromBottom: 0, stick: true, readUpTo: 0, settling: false,
+    peerId, outRead, fromBottom: 0, stick: true, readUpTo: 0, settling: false, panel: false,
     init() {
       // синхронно, а не в $nextTick: иначе IntersectionObserver успевает увидеть сентинел
       // вверху ещё не прокрученного списка и зря грузит страницу старых

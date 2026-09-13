@@ -10,7 +10,10 @@
     </span>
     <span id="chat-badge">{% with m = c.mode %}{% include "partials/im_badge.html" %}{% endwith %}</span>
     <a class="muted" href="{{ c.peer_id|peer_link }}" title="Открыть в VK" target="_blank" rel="noopener">VK</a>
+    <button type="button" class="gear" aria-label="Бот в этом чате" @click="panel = !panel"
+            hx-get="/im/{{ c.peer_id }}/bot" hx-target="#bot-slot" hx-swap="innerHTML" hx-trigger="click once">⚙</button>
   </header>
+  <div id="bot-slot" class="im-bot-slot" x-show="panel" x-cloak></div>
   <div id="messages" class="im-messages" x-ref="list">
     {% if c.oldest %}<div class="im-more" hx-get="/im/{{ c.peer_id }}/messages?before={{ c.oldest }}" hx-trigger="intersect once delay:500ms" hx-swap="outerHTML"></div>{% endif %}
     {% with rows = c.rows, tz = c.tz %}{% include "partials/im_rows.html" %}{% endwith %}

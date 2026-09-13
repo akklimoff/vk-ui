@@ -28,7 +28,7 @@ main.im-shell { max-width: none; padding: 0; height: calc(100vh - 57px); }
 .badge-mode.bad { background: #fde7e7; color: #c62828; }
 .badge-mode.muted { background: var(--im-side); color: var(--pico-muted-color); }
 
-.im-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.im-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; position: relative; }
 .im-empty { display: grid; place-items: center; height: 100%; }
 .im-chat { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .im-chat-head { display: flex; align-items: center; gap: 0.7rem; padding: 0.5rem 1rem; border-bottom: 1px solid var(--im-line); }
@@ -74,6 +74,19 @@ main.im-shell { max-width: none; padding: 0; height: calc(100vh - 57px); }
 .msg:hover .actions { visibility: visible; }
 @media (hover: none) { .msg .actions { visibility: visible; } }
 .actions button { width: auto; padding: 0 0.4rem; margin: 0; background: none; border: none; color: var(--pico-muted-color); }
+.im-chat-head .gear { margin: 0 0 0 auto; padding: 0 0.4rem; width: auto; background: none; border: none; color: var(--pico-muted-color); font-size: 1.3rem; }
+.im-bot-slot { position: absolute; right: 0; top: 57px; width: min(420px, 100%); max-height: calc(100% - 57px); overflow-y: auto; background: var(--pico-card-background-color); border-left: 1px solid var(--im-line); box-shadow: var(--pico-card-box-shadow); z-index: 5; }
+.im-bot { padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.im-bot form { margin: 0; }
+.switch-row { display: flex; gap: 0.6rem; align-items: flex-start; margin: 0; }
+.switch-row input { flex: 0 0 auto; margin-top: 0.2rem; }
+.switch-row span { display: flex; flex-direction: column; }
+.switch-row small { margin: 0; }
+.persona-list { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
+.members { list-style: none; padding: 0; margin: 0; }
+.members li { display: flex; align-items: center; gap: 0.6rem; padding: 0.3rem 0; }
+.members .ava { width: 32px; height: 32px; }
+.members form { margin-left: auto; margin-bottom: 0; }
 
 @media (max-width: 767px) {
   main.im-shell { height: calc(100dvh - 57px); }

@@ -5,17 +5,26 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 
 from bot.access import AccessFile
+from bot.personas import list_personas
 from bot.runtime import RuntimeFile, runtime_defaults
-from bot.status import ReplyLog
+from bot.status import ReplyLog, write_json_atomic
+from web.im.controls import set_keyed_text, set_member, set_paused_peer, set_peer_blocked, set_peer_personas
 from web.im.marks import bot_marks
-from web.im.modes import bot_mode
-from web.im.views import Profiles, parse_conversations, parse_history, peer_of, rows
+from web.im.modes import bot_mode, chat_controls
+from web.im.views import Profiles, is_chat, parse_conversations, parse_history, peer_of, rows
 from web.im.voice import MAX_VOICE_BYTES, prepare_voice
 from web.render import is_hx
+from web.services import access_raw, load_runtime_dict
 
 DIALOGS = 60
 PAGE = 40
 POLL_WINDOW = 50
+SWITCHES = {
+    "auto": ("access", "auto_reply_users", "auto_reply_peers"),
+    "blocked": ("access", "blocked_users", "blocked_peers"),
+    "onboarding": ("access", None, "onboarding_peers"),
+    "paused": ("runtime", "paused_peers", "paused_peers"),
+}
 
 
 def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
@@ -126,5 +135,60 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
     def delete_message(request: Request, peer_id: int, message_id: int):
         guard(lambda: vk().delete_message(message_id))
         return Response(status_code=200) if is_hx(request) else RedirectResponse(f"/im?sel={peer_id}", status_code=303)
+
+    def bot_ctx(peer_id: int):
+        access, rt = lists(), runtime()
+        raw = vk().members(peer_id) if is_chat(peer_id) else {}
+        profiles = Profiles(raw)
+        members = [(m["member_id"], profiles.name(m["member_id"]), profiles.photo(m["member_id"]))
+                   for m in raw.get("items") or [] if m["member_id"] != vk().me_id and m["member_id"] > 0]
+        return {"peer_id": peer_id, "mode": bot_mode(peer_id, access, rt), "c": chat_controls(peer_id, access, rt),
+                "members": members, "personas": list_personas(settings.personas_dir),
+                "active": rt.active_persona, "page": "im"}
+
+    def bot_panel(request: Request, peer_id: int, toast: str | None = None):
+        return render.partial(request, "im_bot", guard(lambda: bot_ctx(peer_id)), toast=toast)
+
+    @router.get("/im/{peer_id}/bot")
+    def bot_page(request: Request, peer_id: int):
+        return bot_panel(request, peer_id)
+
+    @router.post("/im/{peer_id}/bot/prompt")
+    def bot_prompt(request: Request, peer_id: int, text: str = Form("")):
+        field = "peer_prompts" if is_chat(peer_id) else "user_prompts"
+        data = set_keyed_text(access_raw(settings.access_file), field, peer_id, text, vk().resolve_screen_names)
+        write_json_atomic(settings.access_file, data)
+        return bot_panel(request, peer_id, toast="Промпт сохранён")
+
+    @router.post("/im/{peer_id}/bot/personas")
+    def bot_personas(request: Request, peer_id: int, slug: list[str] = Form([])):
+        known = {p.slug for p in list_personas(settings.personas_dir)}
+        unknown = [s for s in slug if s not in known]
+        if unknown:
+            return render.invalid(request, "im_bot", guard(lambda: bot_ctx(peer_id)), f"Нет персоны: {', '.join(unknown)}")
+        write_json_atomic(settings.runtime_file, set_peer_personas(load_runtime_dict(settings.runtime_file), peer_id, slug))
+        return bot_panel(request, peer_id, toast="Персоны сохранены")
+
+    @router.post("/im/{peer_id}/bot/members/{user_id}")
+    def bot_member(request: Request, peer_id: int, user_id: int, on: str = Form("")):
+        data = set_peer_blocked(access_raw(settings.access_file), peer_id, user_id, bool(on), vk().resolve_screen_names)
+        write_json_atomic(settings.access_file, data)
+        return bot_panel(request, peer_id, toast="Сохранено")
+
+    @router.post("/im/{peer_id}/bot/{switch}")
+    def bot_switch(request: Request, peer_id: int, switch: str, on: str = Form("")):
+        if switch not in SWITCHES:
+            raise HTTPException(404)
+        target, user_field, peer_field = SWITCHES[switch]
+        field = peer_field if is_chat(peer_id) else user_field
+        if field is None:
+            raise HTTPException(404, "только для бесед")
+        if target == "runtime":
+            write_json_atomic(settings.runtime_file,
+                              set_paused_peer(load_runtime_dict(settings.runtime_file), peer_id, bool(on)))
+        else:
+            data = set_member(access_raw(settings.access_file), field, peer_id, bool(on), vk().resolve_screen_names)
+            write_json_atomic(settings.access_file, data)
+        return bot_panel(request, peer_id, toast="Сохранено")
 
     return router

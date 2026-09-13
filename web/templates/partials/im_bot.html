@@ -1,0 +1,33 @@
+<div id="bot-panel" class="im-bot">
+  <span id="chat-badge" hx-swap-oob="true">{% with m = mode %}{% include "partials/im_badge.html" %}{% endwith %}</span>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <header><b>Бот в этом чате</b> {% with m = mode %}{% include "partials/im_badge.html" %}{% endwith %}
+    <small class="muted">{{ mode.reason }}</small></header>
+  {% for switch, title, hint, value, show in [
+      ("auto", "Отвечать без тега", "на каждое сообщение" if c.private else "всем участникам, как в личке", c.auto, True),
+      ("onboarding", "Знакомиться с новичками", "вопросы вошедшим", c.onboarding, not c.private),
+      ("paused", "Пауза в этом чате", "runtime.paused_peers", c.paused, True),
+      ("blocked", "Заблокировать", "бот молчит здесь всегда", c.blocked, True)] %}
+  {% if show %}<form hx-post="/im/{{ peer_id }}/bot/{{ switch }}" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
+    <label class="switch-row"><input type="checkbox" role="switch" name="on" value="1" {{ 'checked' if value }}>
+      <span>{{ title }}<small class="muted">{{ hint }}</small></span></label>
+  </form>{% endif %}{% endfor %}
+  <form hx-post="/im/{{ peer_id }}/bot/personas" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
+    <label>Персоны для этого чата <small>пусто — активная «{{ active or 'по умолчанию' }}»; несколько — случайная на каждый ответ</small></label>
+    <div class="persona-list">{% for p in personas %}
+      <label><input type="checkbox" name="slug" value="{{ p.slug }}" {{ 'checked' if p.slug in c.personas }}> {{ p.name }}</label>{% endfor %}</div>
+  </form>
+  <form hx-post="/im/{{ peer_id }}/bot/prompt" hx-target="#bot-panel" hx-swap="outerHTML">
+    <label>{{ "Про этого собеседника" if c.private else "Про эту беседу" }} <small>слой {{ "user_prompts" if c.private else "peer_prompts" }}</small>
+      <textarea name="text" x-data="autogrow" @input="grow()">{{ c.prompt }}</textarea></label>
+    <button class="outline">Сохранить промпт</button>
+  </form>
+  {% if members %}<details open><summary>Участники <span class="muted">{{ members|length }}</span></summary>
+    <ul class="members">{% for uid, name, photo in members %}<li>
+      <span class="ava">{% if photo %}<img src="{{ photo }}" alt="">{% endif %}</span>
+      <a href="https://vk.com/id{{ uid }}">{{ name }}</a>
+      <form hx-post="/im/{{ peer_id }}/bot/members/{{ uid }}" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
+        <label title="Не отвечать этому участнику в этой беседе"><input type="checkbox" role="switch" name="on" value="1" {{ 'checked' if uid in c.blocked_members }}> игнор</label>
+      </form></li>{% endfor %}</ul>
+  </details>{% endif %}
+</div>
