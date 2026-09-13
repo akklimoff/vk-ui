@@ -195,3 +195,10 @@ def test_send_bad_voice_is_422_without_vk_calls(client):
     assert r.status_code == 422 and "ogg" in r.text
     vk = client.app.state.vk
     assert vk is None or not [c for c in vk.calls if c[0] in ("voice", "send")]
+
+
+def test_draft_route_returns_plain_text_and_sends_nothing(client):
+    r = client.post(f"/im/{PEER_CHAT}/draft", auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200 and r.text == "черновик от llm"
+    assert r.headers["content-type"].startswith("text/plain")
+    assert "send" not in [c[0] for c in client.app.state.vk.calls]

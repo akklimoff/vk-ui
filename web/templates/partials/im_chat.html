@@ -31,6 +31,8 @@
       <label class="attach" title="Голосовое из .ogg/.mp3"><input type="file" name="voice" accept=".ogg,.mp3,audio/ogg,audio/mpeg" x-ref="f" @change="pick()" hidden><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"/></svg></label>
       <textarea name="text" rows="1" placeholder="Сообщение" x-ref="t" x-model="text" @input="grow()"
                 @keydown.enter="if (!$event.shiftKey && !$event.isComposing) { $event.preventDefault(); $el.form.requestSubmit() }"></textarea>
+      <button type="button" class="draft" title="Черновик от бота" hx-post="/im/{{ c.peer_id }}/draft" hx-params="none" hx-swap="none"
+              hx-disabled-elt="this" @htmx:after-request="if ($event.detail.xhr.status === 200) draft($event.detail.xhr.responseText)">✨</button>
       <button type="submit" class="send" aria-label="Отправить"><svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></button>
     </div>
   </form>
