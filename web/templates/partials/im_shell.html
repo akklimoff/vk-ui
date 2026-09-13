@@ -1,0 +1,13 @@
+{% from "partials/im_icons.html" import icon %}
+<div class="vk-shell" x-data="{ drawer: false }" @keydown.escape.window="drawer = false">
+  <header class="vk-header">
+    <button type="button" class="ib vk-burger" aria-label="Меню" @click="drawer = !drawer">{{ icon('menu_outline_24') }}</button>
+    <a class="vk-logo" href="/"><span class="vk-logo-mark">{{ icon('robot_outline_20') }}</span>vk-bot</a>
+  </header>
+  <div class="vk-scrim" x-show="drawer" x-cloak @click="drawer = false"></div>
+  <nav class="vk-nav" :class="{ open: drawer }" aria-label="Разделы">
+    <ul>{% for item in nav %}
+      <li><a href="{{ item.href }}" {% if page == item.key %}aria-current="page"{% endif %}>{{ icon(item.icon) }}{{ item.title }}</a></li>{% endfor %}
+    </ul>
+  </nav>
+</div>

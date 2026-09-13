@@ -252,3 +252,17 @@ def test_send_counts_as_sent_when_only_rendering_fails(client):
     client.app.state.vk.history_page = rate_limited
     r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "ещё", "after": "502"}, auth=AUTH, headers={"HX-Request": "true"})
     assert r.status_code == 200 and json.loads(r.headers["HX-Trigger"])["toast"] == "Отправлено" and "<article" not in r.text
+
+
+def test_im_page_wears_the_vk_shell(client):
+    r = client.get("/im", auth=AUTH)
+    assert 'class="page-im"' in r.text
+    nav = r.text.split('class="vk-nav"')[1].split("</nav>")[0]
+    assert 'aria-current="page"' in nav.split("Мессенджер")[0]
+    assert "vk-icons.svg#message_outline_20" in nav and "vk-icons.svg#robot_outline_20" in nav
+    assert 'class="topnav"' not in r.text
+
+
+def test_other_pages_keep_the_plain_nav(client):
+    r = client.get("/", auth=AUTH)
+    assert 'class="topnav"' in r.text and "vk-nav" not in r.text and 'href="/im"' in r.text

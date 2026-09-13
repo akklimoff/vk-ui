@@ -14,16 +14,12 @@
 <script src="/static/im.js"></script>
 <script defer src="/static/alpine.min.js"></script>
 </head>
-<body>
-<nav class="topnav" aria-label="Разделы">
-  <ul>{% for href, title, key in [("/im", "Мессенджер", "im"), ("/", "Статус", "status"),
-                                   ("/personas", "Персоны", "personas"), ("/prompts", "Промпт", "prompts"),
-                                   ("/access", "Доступ", "access"),
-                                   ("/settings", "Настройки", "settings"), ("/replies", "Ответы", "replies"),
-                                   ("/sandbox", "Песочница", "sandbox")] %}
-    <li><a href="{{ href }}" {% if page == key %}aria-current="page"{% endif %}>{{ title }}</a></li>{% endfor %}
+<body class="{% block body_class %}{% endblock %}">
+{% block nav %}<nav class="topnav" aria-label="Разделы">
+  <ul>{% for item in nav %}
+    <li><a href="{{ item.href }}" {% if page == item.key %}aria-current="page"{% endif %}>{{ item.title }}</a></li>{% endfor %}
   </ul>
-</nav>
+</nav>{% endblock %}
 <main class="{% block main_class %}container{% endblock %}">{% block body %}{% endblock %}</main>
 <div class="toasts" x-data aria-live="polite">
   <template x-for="t in $store.toasts.items" :key="t.id">

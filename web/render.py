@@ -1,10 +1,30 @@
 import json
+from typing import NamedTuple
 
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from web.humanize import ago, duration
+
+
+class NavItem(NamedTuple):
+    href: str
+    title: str
+    key: str
+    icon: str
+
+
+NAV = (
+    NavItem("/im", "Мессенджер", "im", "message_outline_20"),
+    NavItem("/", "Статус", "status", "pulse_outline_20"),
+    NavItem("/personas", "Персоны", "personas", "users_outline_20"),
+    NavItem("/prompts", "Промпт", "prompts", "text_outline_20"),
+    NavItem("/access", "Доступ", "access", "key_outline_20"),
+    NavItem("/settings", "Настройки", "settings", "gear_outline_20"),
+    NavItem("/replies", "Ответы", "replies", "reply_outline_20"),
+    NavItem("/sandbox", "Песочница", "sandbox", "robot_outline_20"),
+)
 
 
 def is_hx(request: Request) -> bool:
@@ -23,6 +43,7 @@ class Renderer:
     def __init__(self, templates_dir: str, **filters):
         self._templates = Jinja2Templates(directory=templates_dir)
         self._templates.env.filters.update({"ago": ago, "duration": duration, **filters})
+        self._templates.env.globals["nav"] = NAV
 
     def page(self, request: Request, name: str, ctx: dict, status: int = 200) -> Response:
         template = f"partials/{name}.html" if is_hx(request) else f"{name}.html"
