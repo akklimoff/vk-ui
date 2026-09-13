@@ -67,6 +67,11 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
     def dialogs_partial(request: Request):
         return render.partial(request, "im_dialogs", {"page": "im", **guard(dialogs_ctx)})
 
+    @router.get("/im/{peer_id}/messages")
+    def messages_partial(request: Request, peer_id: int, after: int | None = None, before: int | None = None):
+        ctx = guard(lambda: chat_ctx(peer_id, before=before, after=after))
+        return render.partial(request, "im_rows_page", {"chat": ctx, "after": after, "before": before, "page": "im"})
+
     @router.get("/im/{peer_id}")
     def chat_partial(request: Request, peer_id: int):
         ctx = guard(lambda: chat_ctx(peer_id))

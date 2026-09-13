@@ -13,13 +13,25 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("chat", (peerId, outRead) => ({
-    peerId, outRead,
+    peerId, outRead, fromBottom: 0, stick: true,
     init() {
-      this.$nextTick(() => this.scrollBottom());
+      // синхронно, а не в $nextTick: иначе IntersectionObserver успевает увидеть сентинел
+      // вверху ещё не прокрученного списка и зря грузит страницу старых
+      const list = this.$el.querySelector(".im-messages");
+      list.scrollTop = list.scrollHeight;
+      // измеряем до свопа: после вставки старых рядов над экраном браузер оставляет scrollTop
+      // (у верхнего края scroll anchoring не срабатывает), и видимый сентинел тянул бы всю историю
+      this.$el.addEventListener("htmx:beforeSwap", () => {
+        const el = this.$refs.list;
+        this.fromBottom = el.scrollHeight - el.scrollTop;
+        this.stick = this.nearBottom();
+      });
       this.$el.addEventListener("htmx:afterSwap", (e) => {
         const state = document.getElementById("chat-state");
         if (state) this.outRead = Number(state.dataset.outRead);
-        if (e.detail.target.id === "messages" || e.detail.target.classList.contains("im-more")) this.keepScroll(e);
+        const target = e.detail.target;
+        if (target.id === "messages" && this.stick) this.scrollBottom();
+        if (target.classList.contains("im-more")) this.$refs.list.scrollTop = this.$refs.list.scrollHeight - this.fromBottom;
       });
     },
     nearBottom() {
@@ -27,6 +39,5 @@ document.addEventListener("alpine:init", () => {
       return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     },
     scrollBottom() { this.$refs.list.scrollTop = this.$refs.list.scrollHeight; },
-    keepScroll(e) { if (this.nearBottom()) this.scrollBottom(); },
   }));
 });

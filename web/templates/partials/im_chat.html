@@ -12,7 +12,10 @@
     <a class="muted" href="{{ c.peer_id|peer_link }}" title="Открыть в VK" target="_blank" rel="noopener">VK</a>
   </header>
   <div id="messages" class="im-messages" x-ref="list">
+    {% if c.oldest %}<div class="im-more" hx-get="/im/{{ c.peer_id }}/messages?before={{ c.oldest }}" hx-trigger="intersect once delay:500ms" hx-swap="outerHTML"></div>{% endif %}
     {% with rows = c.rows, tz = c.tz %}{% include "partials/im_rows.html" %}{% endwith %}
   </div>
   <div id="chat-state" data-out-read="{{ c.out_read }}" hidden></div>
+  <div id="chat-poll" hx-get="/im/{{ c.peer_id }}/messages?after={{ c.newest }}"
+       hx-trigger="every 3s [document.visibilityState === 'visible']" hx-target="#messages" hx-swap="beforeend"></div>
 </div>

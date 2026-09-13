@@ -109,3 +109,23 @@ def test_chat_marks_bot_replies(client, settings):
 def test_dialogs_partial(client):
     r = client.get("/im/dialogs", auth=AUTH, headers={"HX-Request": "true"})
     assert r.status_code == 200 and "<li" in r.text and "<nav" not in r.text
+
+
+def test_poll_returns_only_newer_rows_and_moves_cursor(client):
+    r = client.get(f"/im/{PEER_CHAT}/messages?after=500", auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert 'data-id="501"' in r.text and 'data-id="502"' in r.text and 'data-id="500"' not in r.text
+    assert 'id="chat-poll"' in r.text and "after=502" in r.text and 'hx-swap-oob="true"' in r.text
+    assert 'id="chat-state"' in r.text and 'data-out-read="501"' in r.text
+
+
+def test_poll_without_news_is_empty_but_keeps_cursor(client):
+    r = client.get(f"/im/{PEER_CHAT}/messages?after=502", auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200 and "<article" not in r.text and "after=502" in r.text
+
+
+def test_older_page_replaces_sentinel(client):
+    r = client.get(f"/im/{PEER_CHAT}/messages?before=499", auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert client.app.state.vk.calls[-1] == ("history", PEER_CHAT, 40, 499)
+    assert 'class="im-more"' in r.text and "before=499" in r.text   # фикстура отдаёт те же id — сентинел на самый старый
