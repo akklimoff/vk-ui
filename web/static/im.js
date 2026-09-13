@@ -77,12 +77,27 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("composer", () => ({
-    text: "", reply: null,
+    text: "", reply: null, file: null,
+    get size() {
+      if (!this.file) return "";
+      const kb = this.file.size / 1024;
+      return kb < 1024 ? Math.ceil(kb) + " КБ" : (kb / 1024).toFixed(1) + " МБ";
+    },
+    pick() {
+      const f = this.$refs.f.files[0];
+      this.file = f || null;
+      if (f && !/\.(ogg|mp3)$/i.test(f.name)) {
+        toast("Нужен .ogg или .mp3", "bad");
+        this.clearFile();
+      }
+    },
+    clearFile() { this.file = null; this.$refs.f.value = ""; },
     grow() { const t = this.$refs.t; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; },
     quote(d) { this.reply = d; this.$refs.t.focus(); },
     reset() {
       this.text = "";
       this.reply = null;
+      this.clearFile();
       document.getElementById("composer-error").textContent = "";
       this.$nextTick(() => this.grow());
     },

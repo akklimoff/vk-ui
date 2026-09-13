@@ -1,7 +1,7 @@
 import time
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 
 from bot.access import AccessFile
@@ -10,6 +10,7 @@ from bot.status import ReplyLog
 from web.im.marks import bot_marks
 from web.im.modes import bot_mode
 from web.im.views import Profiles, parse_conversations, parse_history, peer_of, rows
+from web.im.voice import MAX_VOICE_BYTES, prepare_voice
 from web.render import is_hx
 
 DIALOGS = 60
@@ -90,13 +91,24 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
         return render.partial(request, "im_chat", {"chat": ctx, "page": "im"}, push_url=f"/im?sel={peer_id}")
 
     @router.post("/im/{peer_id}/send")
-    def send_message(request: Request, peer_id: int, text: str = Form(""), reply_to: str = Form("")):
+    def send_message(request: Request, peer_id: int, text: str = Form(""), reply_to: str = Form(""),
+                     voice: UploadFile | None = File(None)):
         text = text.strip()
-        if not text:
+        # на байт больше лимита — чтобы sniff_voice увидел превышение, не читая гигабайты
+        data = voice.file.read(MAX_VOICE_BYTES + 1) if voice is not None and voice.filename else b""
+        if not text and not data:
             return send_form_error(request, "Пустое сообщение")
         reply_id = int(reply_to) if reply_to.strip() else None
         try:
-            message_id = vk().send(peer_id, text, reply_to=reply_id)
+            ogg = prepare_voice(data, voice.filename) if data else b""
+        except ValueError as e:
+            return send_form_error(request, str(e))
+        try:
+            attachment = vk().upload_voice(peer_id, ogg, "ogg") if ogg else ""
+        except Exception as e:
+            return send_form_error(request, f"VK не принял голосовое: {safe_error(e)}")
+        try:
+            message_id = vk().send(peer_id, text, reply_to=reply_id, attachment=attachment)
             ctx = sent_ctx(peer_id, message_id)
         except Exception as e:
             return send_form_error(request, f"VK не отправил: {safe_error(e)}")

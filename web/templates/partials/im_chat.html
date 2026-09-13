@@ -15,14 +15,17 @@
     {% if c.oldest %}<div class="im-more" hx-get="/im/{{ c.peer_id }}/messages?before={{ c.oldest }}" hx-trigger="intersect once delay:500ms" hx-swap="outerHTML"></div>{% endif %}
     {% with rows = c.rows, tz = c.tz %}{% include "partials/im_rows.html" %}{% endwith %}
   </div>
-  <form class="im-composer" x-data="composer()" method="post" action="/im/{{ c.peer_id }}/send"
+  <form class="im-composer" x-data="composer()" method="post" action="/im/{{ c.peer_id }}/send" enctype="multipart/form-data"
         hx-post="/im/{{ c.peer_id }}/send" hx-target="#messages" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]"
         @htmx:after-request="if ($event.detail.elt === $el && $event.detail.xhr.status < 300) reset()" @im-reply.window="quote($event.detail)">
     <div class="quote-bar" x-show="reply" x-cloak><b x-text="reply?.author"></b><span x-text="reply?.text"></span>
       <button type="button" @click="reply = null" aria-label="Убрать цитату">×</button></div>
     <small id="composer-error" class="im-composer-error"></small>
     <input type="hidden" name="reply_to" :value="reply?.id || ''">
+    <div class="file-chip" x-show="file" x-cloak><span x-text="file?.name"></span><span class="muted" x-text="size"></span>
+      <button type="button" @click="clearFile()" aria-label="Убрать файл">×</button></div>
     <div class="row-input">
+      <label class="attach" title="Голосовое из .ogg/.mp3"><input type="file" name="voice" accept=".ogg,.mp3,audio/ogg,audio/mpeg" x-ref="f" @change="pick()" hidden><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"/></svg></label>
       <textarea name="text" rows="1" placeholder="Сообщение" x-ref="t" x-model="text" @input="grow()"
                 @keydown.enter="if (!$event.shiftKey && !$event.isComposing) { $event.preventDefault(); $el.form.requestSubmit() }"></textarea>
       <button type="submit" class="send" aria-label="Отправить"><svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></button>

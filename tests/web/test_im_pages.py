@@ -167,3 +167,31 @@ def test_mark_read_and_delete(client):
 def test_reply_button_payload_survives_attribute_quoting(client):
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
     assert "@click='$dispatch(\"im-reply\", { id: 501, author: \"" in r.text
+
+
+def test_send_voice_uploads_then_sends_attachment(client):
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": ""},
+                    files={"voice": ("hello.ogg", b"OggS" + b"\0" * 100, "audio/ogg")},
+                    auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    calls = client.app.state.vk.calls
+    assert ("voice", PEER_CHAT, 104, "ogg") in calls
+    assert ("send", PEER_CHAT, "", None, "audio_message1_8_abc") in calls
+
+
+def test_send_mp3_is_converted_before_upload(client, monkeypatch):
+    monkeypatch.setattr("web.im.routes.prepare_voice", lambda data, name: b"OggS" + b"\0" * 10)
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": "с голосом"},
+                    files={"voice": ("hello.mp3", b"ID3\x04" + b"\0" * 100, "audio/mpeg")},
+                    auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert ("voice", PEER_CHAT, 14, "ogg") in client.app.state.vk.calls
+
+
+def test_send_bad_voice_is_422_without_vk_calls(client):
+    r = client.post(f"/im/{PEER_CHAT}/send", data={"text": ""},
+                    files={"voice": ("x.wav", b"RIFF" + b"\0" * 100, "audio/wav")},
+                    auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 422 and "ogg" in r.text
+    vk = client.app.state.vk
+    assert vk is None or not [c for c in vk.calls if c[0] in ("voice", "send")]
