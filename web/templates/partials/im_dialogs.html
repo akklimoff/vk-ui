@@ -1,0 +1,17 @@
+{# только <li>, вставляется в #dialog-list #}
+{% for d, mode in dialogs %}<li class="dlg" data-title="{{ d.peer.title|lower }}" data-unread="{{ d.unread }}"
+    x-show="matches($el)" :class="{ active: sel === {{ d.peer.id }} }">
+  <a hx-get="/im/{{ d.peer.id }}" hx-target="#chat" hx-swap="innerHTML" href="/im?sel={{ d.peer.id }}" @click="open({{ d.peer.id }})">
+    <span class="ava">{% if d.peer.photo %}<img src="{{ d.peer.photo }}" alt="">{% else %}<i>{{ d.peer.title[:1] }}</i>{% endif %}
+      {% if d.peer.online %}<b class="dot"></b>{% endif %}</span>
+    <span class="body">
+      <span class="line"><span class="title">{{ d.peer.title }}</span>
+        {% if d.muted %}<svg class="ico" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3l3-3-1.4-1.4-3 3-3-3L10.7 9l3 3-3 3 1.4 1.4 3-3 3 3 1.4-1.4-3-3z"/></svg>{% endif %}
+        {% with m = mode %}{% include "partials/im_badge.html" %}{% endwith %}
+        <time class="muted">{% if d.last %}{{ d.last.ts|clock(tz) }}{% endif %}</time></span>
+      <span class="line"><span class="preview muted">{% if d.last %}{% if d.last.out %}Вы{% else %}{{ d.last.author.split(' ')[0] }}{% endif %}: {{ d.last|preview }}{% endif %}</span>
+        {% if d.unread %}<span class="unread">{{ d.unread }}</span>{% elif d.last and d.last.out %}<span class="ticks {{ 'read' if d.last.read }}">✓{{ '✓' if d.last.read }}</span>{% endif %}
+        {% if d.pinned %}<svg class="ico" viewBox="0 0 24 24"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2l-2-2z"/></svg>{% endif %}</span>
+    </span>
+  </a>
+</li>{% endfor %}

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 UNITS = ((86400, "д"), (3600, "ч"), (60, "мин"), (1, "с"))
 
 
@@ -25,3 +27,11 @@ def duration(seconds: float | None) -> str:
         if len(parts) == 2:
             break
     return " ".join(parts) if parts else "0 с"
+
+
+def clock(ts: float, tz) -> str:
+    return datetime.fromtimestamp(ts, tz).strftime("%H:%M")
+
+
+def mmss(seconds: int) -> str:
+    return f"{int(seconds) // 60}:{int(seconds) % 60:02d}"

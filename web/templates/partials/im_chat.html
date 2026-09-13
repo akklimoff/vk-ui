@@ -1,0 +1,18 @@
+{# ожидает chat: dict из chat_ctx #}
+{% set c = chat %}
+<div class="im-chat" x-data="chat({{ c.peer_id }}, {{ c.out_read }})">
+  <header class="im-chat-head">
+    <button type="button" class="back" @click="$dispatch('im-back')" aria-label="Назад">‹</button>
+    <span class="ava">{% if c.peer and c.peer.photo %}<img src="{{ c.peer.photo }}" alt="">{% endif %}</span>
+    <span class="body">
+      <b>{{ c.peer.title if c.peer else c.peer_id|peer_label }}</b>
+      <small class="muted">{% if c.peer and c.peer.kind == 'chat' %}{{ c.peer.members }} участника{% elif c.peer %}{{ 'онлайн' if c.peer.online else 'не в сети' }}{% endif %}</small>
+    </span>
+    <span id="chat-badge">{% with m = c.mode %}{% include "partials/im_badge.html" %}{% endwith %}</span>
+    <a class="muted" href="{{ c.peer_id|peer_link }}" title="Открыть в VK" target="_blank" rel="noopener">VK</a>
+  </header>
+  <div id="messages" class="im-messages" x-ref="list">
+    {% with rows = c.rows, tz = c.tz %}{% include "partials/im_rows.html" %}{% endwith %}
+  </div>
+  <div id="chat-state" data-out-read="{{ c.out_read }}" hidden></div>
+</div>

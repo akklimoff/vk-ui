@@ -1,6 +1,8 @@
+from zoneinfo import ZoneInfo
+
 import pytest
 
-from web.humanize import ago, duration
+from web.humanize import ago, clock, duration, mmss
 
 
 @pytest.mark.parametrize("seconds, expected", [
@@ -26,3 +28,8 @@ def test_ago(seconds, expected):
 ])
 def test_duration(seconds, expected):
     assert duration(seconds) == expected
+
+
+def test_clock_and_mmss():
+    assert clock(1788876240, ZoneInfo("Europe/Moscow")) == "17:04"
+    assert mmss(20) == "0:20" and mmss(75) == "1:15"

@@ -1,0 +1,17 @@
+<div class="im" x-data="im({{ sel or 'null' }})" :class="{ 'show-chat': pane === 'chat' }">
+  <aside class="im-side">
+    <header class="im-side-head">
+      <b>Мессенджер</b>
+      <input type="search" placeholder="Поиск" x-model="filter" aria-label="Поиск по диалогам">
+      <label class="im-unread-toggle"><input type="checkbox" role="switch" x-model="unreadOnly"> Только непрочитанные</label>
+    </header>
+    <div id="dialogs" class="im-dialogs">
+      <ul id="dialog-list" hx-get="/im/dialogs" hx-trigger="every 10s [document.visibilityState === 'visible']"
+          hx-target="#dialog-list" hx-swap="innerHTML">{% include "partials/im_dialogs.html" %}</ul>
+    </div>
+  </aside>
+  <section id="chat" class="im-main">
+    {% if chat %}{% include "partials/im_chat.html" %}{% else %}
+    <div class="im-empty muted">Выберите диалог</div>{% endif %}
+  </section>
+</div>
