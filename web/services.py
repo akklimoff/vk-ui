@@ -6,7 +6,7 @@ from bot.config import parse_ids
 from bot.context import build_context
 from bot.llm import (PERSONA_LAYER, PRIVATE_LAYER, PROVIDERS, SYSTEM_LAYER, USER_LAYER,
                      available_models, compose_system_message, find_model, resolve_provider)
-from bot.personas import load_persona, persona_path, render_persona
+from ai.personas import load_persona, persona_path, render_persona
 from bot.status import read_json, write_json_atomic
 
 CONNECTED_WITHIN = 90.0

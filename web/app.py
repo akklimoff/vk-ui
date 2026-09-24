@@ -14,8 +14,8 @@ from web.auth import make_guard
 from web.humanize import clock, mmss, plural, short_since
 from web.im.routes import create_router
 from web.im.views import presence, preview, wave_bars
-from bot.personas import list_personas, load_persona
-from bot.privacy import sanitize_reply
+from ai.personas import list_personas, load_persona
+from common.redact import sanitize_reply
 from web.render import Renderer, is_hx
 from web.services import (access_form_values, access_raw, default_model_label, load_runtime_dict,
                           model_groups, model_label, parse_access_form, parse_runtime_form, peer_label,

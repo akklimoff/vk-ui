@@ -6,7 +6,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 
 from bot.access import AccessFile
-from bot.personas import list_personas
+from ai.personas import list_personas
 from bot.runtime import RuntimeFile, runtime_defaults
 from bot.status import ReplyLog, write_json_atomic
 from web.im.controls import set_keyed_text, set_member, set_paused_peer, set_peer_blocked, set_peer_personas

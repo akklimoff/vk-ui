@@ -1,10 +1,10 @@
 from bot.access import scoped_prompts
-from bot.batching import split_reply
+from ai.parts import split_reply
 from bot.context import build_context
 from bot.llm import secrets_of
-from bot.personas import load_persona
+from ai.personas import load_persona
 from bot.reply import ReplyRequest, generate_reply
-from bot.repetition import own_messages
+from ai.repetition import own_messages
 from bot.runtime import persona_for
 from web.im.views import is_chat
 
