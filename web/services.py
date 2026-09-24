@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from ai.llm import PROVIDERS, available_models, find_model, resolve_provider
 from ai.personas import load_persona, persona_path, render_persona
-from ai.service import ReplyRequest
+from ai.contract import ReplyRequest
 from bot.access import AccessFile, join_lines, parse_access, scoped_prompts
 from bot.config import parse_ids
 from bot.context import to_lines

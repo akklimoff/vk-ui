@@ -1,4 +1,4 @@
-from ai.service import ReplyResult
+from ai.contract import ReplyResult
 
 
 class FakeAi:

@@ -1,4 +1,4 @@
-from ai.service import ReplyRequest
+from ai.contract import ReplyRequest
 from bot.access import scoped_prompts
 from bot.context import to_lines
 from bot.reply import deliverable
