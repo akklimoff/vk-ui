@@ -1,0 +1,21 @@
+<form id="moderation-form" method="post" action="/moderation" hx-post="/moderation" hx-target="#moderation-form" hx-swap="outerHTML">
+  <article>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <p class="muted">Команды <b>кик</b>, <b>бан</b>/<b>чс</b>, <b>добавить</b>/<b>вернуть</b> — первым словом, ответом на сообщение или с @ником, ссылкой, id. Выполняет сервис vk-bot, отчёт — в «Избранном».</p>
+    <details open>
+      <summary><b>Беседы</b> <span class="muted">где бот администрирует</span></summary>
+      {% for c in chats %}
+      <label><input type="checkbox" name="peer" value="{{ c.peer_id }}"{% if c.checked %} checked{% endif %}>
+        {{ c.title }} <small class="muted">{% if c.members %}{{ c.members }} уч.{% endif %}{% if not c.can_moderate %} · нет прав админа{% endif %}</small></label>
+      {% else %}<p class="muted">Бесед нет</p>{% endfor %}
+    </details>
+    <details open>
+      <summary><b>Доверенные</b> <span class="muted">друзья, которым можно командовать</span></summary>
+      {% for f in friends %}
+      <label><input type="checkbox" name="user" value="{{ f.user_id }}"{% if f.checked %} checked{% endif %}>
+        {{ f.name }}</label>
+      {% else %}<p class="muted">Друзей нет</p>{% endfor %}
+    </details>
+    <footer class="sticky-actions"><button>Сохранить</button></footer>
+  </article>
+</form>

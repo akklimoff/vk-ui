@@ -15,9 +15,11 @@ from web.humanize import clock, mmss, plural, short_since
 from web.im.routes import create_router
 from web.im.views import presence, preview, wave_bars
 from ai.personas import list_personas, load_persona
+from common.moderation import dump_moderation, moderation_file
 from common.redact import sanitize_reply
 from web.render import Renderer, is_hx
 from web.services import (PromptView, access_form_values, access_raw, load_runtime_dict,
+                          moderation_view, parse_moderation_form,
                           model_groups, model_label, parse_access_form, parse_runtime_form, peer_label,
                           peer_link,
                           prompt_view, runtime_form_values, sandbox_reply, save_persona,
@@ -180,6 +182,30 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         write_json_atomic(settings.access_file, data)
         return render.saved(request, "access", {"v": access_form_values(settings.access_file), "page": "access"},
                             toast="Сохранено", redirect="/access")
+
+    mod_file = moderation_file(settings.moderation_file)
+
+    def moderation_ctx() -> dict:
+        ctx = {"page": "moderation", "chats": [], "friends": []}
+        try:
+            ctx |= moderation_view(vk(), mod_file.current())
+        except Exception as e:
+            ctx["error"] = safe_error(e)
+        return ctx
+
+    @app.get("/moderation")
+    def moderation_page(request: Request):
+        return render.page(request, "moderation", moderation_ctx())
+
+    @app.post("/moderation")
+    async def save_moderation(request: Request):
+        form = [(k, str(v)) for k, v in (await request.form()).multi_items()]
+        try:
+            cfg = parse_moderation_form(form)
+        except ValueError as e:
+            return render.invalid(request, "moderation", moderation_ctx(), str(e))
+        write_json_atomic(settings.moderation_file, dump_moderation(cfg))
+        return render.saved(request, "moderation", moderation_ctx(), toast="Сохранено", redirect="/moderation")
 
     @app.get("/replies")
     def replies_page(request: Request, peer: int | None = None, after: float = 0.0):
