@@ -1,7 +1,7 @@
 from bot.access import scoped_prompts
 from ai.parts import split_reply
 from bot.context import build_context
-from bot.llm import secrets_of
+from ai.llm import secrets_of
 from ai.personas import load_persona
 from bot.reply import ReplyRequest, generate_reply
 from ai.repetition import own_messages
@@ -25,7 +25,7 @@ def draft_reply(settings, llm, vk, lists, rt, peer_id: int) -> str:
         auto_chat=not private and peer_id in lists.auto_reply_peers,
         persona_prompt=persona.prompt if persona else settings.persona_prompt,
         private_prompt=general_prompt, user_prompt=specific_prompt,
-        temperature=rt.temperature, seed=last_other or peer_id,
+        temperature=rt.temperature,
         own_recent=own_messages(history, vk.me_id), model=rt.active_model,
     )
     reply, _ = generate_reply(llm, request, [settings.vk_token, *secrets_of(settings)], vk.me_id)

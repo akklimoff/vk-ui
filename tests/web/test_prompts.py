@@ -1,6 +1,6 @@
 import json
 
-from bot.llm import PERSONA_LAYER, PRIVATE_LAYER, SYSTEM_LAYER, USER_LAYER
+from ai.llm import PERSONA_LAYER, PRIVATE_LAYER, SYSTEM_LAYER, USER_LAYER
 from tests.web.conftest import AUTH
 from web.services import prompt_view
 

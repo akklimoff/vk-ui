@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from bot.config import Settings
 from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
-from bot.llm import LlmClient, available_models, secrets_of
+from ai.llm import LlmClient, available_models, secrets_of
 from bot.status import ReplyLog, write_json_atomic
 from bot.vk import VkClient
 from web.auth import make_guard
