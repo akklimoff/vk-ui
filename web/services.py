@@ -3,7 +3,8 @@ from dataclasses import dataclass
 
 from bot.access import AccessFile, join_lines, parse_access, scoped_prompts
 from bot.config import parse_ids
-from bot.context import build_context
+from ai.context import render_conversation
+from bot.context import to_lines
 from ai.llm import (PERSONA_LAYER, PRIVATE_LAYER, PROVIDERS, SYSTEM_LAYER, USER_LAYER,
                      available_models, compose_system_message, find_model, resolve_provider)
 from ai.personas import load_persona, persona_path, render_persona
@@ -222,8 +223,8 @@ def sandbox_reply(settings, llm, vk, *, persona_slug: str, conversation: str, pe
     is_private, auto_chat, general_prompt, specific_prompt = False, False, "", ""
     if peer_id is not None:
         history = vk.history(peer_id, count)
-        conversation = build_context(history, vk.resolve_name, settings.message_char_limit,
-                                     settings.context_char_budget, vk.me_id)
+        conversation = render_conversation(to_lines(history, vk.resolve_name, vk.me_id),
+                                           settings.message_char_limit, settings.context_char_budget)
         is_private = peer_id < GROUP_CHAT_PEER_BASE
         lists = AccessFile(settings.access_file, vk.resolve_screen_names).current()
         general_prompt, specific_prompt = scoped_prompts(lists, peer_id, is_private)
