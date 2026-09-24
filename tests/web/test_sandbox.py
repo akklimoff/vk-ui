@@ -70,18 +70,18 @@ def test_sandbox_hx_returns_result_partial_only(client):
 def test_sandbox_hx_bad_number_returns_422_error(client):
     r = client.post("/sandbox", data={"persona": "v", "conversation": "x", "peer_id": "",
                                       "count": "many", "asker": "Вася", "temperature": "0.8"}, auth=AUTH, headers=HX)
-    assert r.status_code == 422 and 'class="error"' in r.text and client.app.state.ai is None
+    assert r.status_code == 422 and 'class="error"' in r.text and client.app.state.ai.requests == []
 
 
 def test_sandbox_llm_failure_returns_422_with_reason_and_hides_secrets(settings):
     class BrokenAi(FakeAi):
         def reply(self, req):
-            raise RuntimeError("timeout, key k")
+            raise RuntimeError("timeout, key xai-KEY, token vk")
 
     client = TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=BrokenAi), follow_redirects=False)
     data = {"persona": "", "conversation": "x", "peer_id": "", "count": "1", "asker": "a", "temperature": "0.5"}
     r = client.post("/sandbox", data=data, auth=AUTH, headers=HX)
-    assert r.status_code == 422 and "timeout" in r.text and "key k" not in r.text and "[скрыто]" in r.text
+    assert r.status_code == 422 and "timeout" in r.text and "xai-KEY" not in r.text and "token [скрыто]" in r.text
     assert client.post("/sandbox", data=data, auth=AUTH).status_code == 400
 
 
@@ -94,3 +94,22 @@ def test_sandbox_shows_what_the_bot_would_send(settings):
     r = client.post("/sandbox", data={"persona": "", "conversation": "", "peer_id": "2000000001", "count": "10",
                                       "asker": "Вася", "temperature": "0.5"}, auth=AUTH, headers=HX)
     assert r.status_code == 200 and "Валя тут, токен [скрыто]" in r.text and "[id1|" not in r.text
+
+
+def unreachable_ai(settings):
+    from ai.client import AiClient
+
+    return AiClient("http://127.0.0.1:9", 0.5)
+
+
+def test_sandbox_reports_unreachable_ai_service(settings):
+    client = TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=unreachable_ai), follow_redirects=False)
+    r = client.post("/sandbox", data={"persona": "", "conversation": "Вася: привет", "peer_id": "", "count": "1",
+                                      "asker": "Вася", "temperature": "0.5"}, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and "ИИ-сервис недоступен" in r.text
+
+
+def test_settings_page_survives_unreachable_ai_service(settings):
+    client = TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=unreachable_ai), follow_redirects=False)
+    r = client.get("/settings", auth=AUTH)
+    assert r.status_code == 200 and "ИИ-сервис недоступен" in r.text

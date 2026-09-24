@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 
-from ai.llm import PROVIDERS, available_models, find_model, resolve_provider
+from ai.catalog import find_model
 from ai.personas import load_persona, persona_path, render_persona
 from ai.contract import ReplyRequest
 from bot.access import AccessFile, join_lines, parse_access, scoped_prompts
@@ -93,24 +93,17 @@ def parse_runtime_form(form: dict, allowed_models=()) -> dict:
     return data
 
 
-def model_groups(settings) -> list[tuple[str, list]]:
+def model_groups(models) -> list[tuple[str, list]]:
     """Модели для выпадающего списка, сгруппированные по провайдеру."""
     groups: dict[str, list] = {}
-    for model in available_models(settings):
-        groups.setdefault(model.provider, []).append(model)
-    return [(PROVIDERS[name].label or name, models) for name, models in groups.items()]
+    for model in models:
+        groups.setdefault(model.provider_label, []).append(model)
+    return list(groups.items())
 
 
 def model_label(model_id: str) -> str:
     found = find_model(model_id)
     return found.label if found else model_id
-
-
-def default_model_label(settings) -> str:
-    try:
-        return resolve_provider(settings.llm_provider, settings.llm_base_url, settings.llm_model).model
-    except ValueError:
-        return settings.llm_model or settings.llm_provider
 
 
 def save_runtime_patch(path: str, **fields) -> None:

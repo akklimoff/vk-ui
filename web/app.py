@@ -7,8 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from bot.config import Settings
 from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
-from ai.llm import available_models, secrets_of
-from ai.service import AiService
+from ai.client import AiError, ai_backend
 from bot.status import ReplyLog, write_json_atomic
 from bot.vk import VkClient
 from web.auth import make_guard
@@ -18,7 +17,7 @@ from web.im.views import presence, preview, wave_bars
 from ai.personas import list_personas, load_persona
 from common.redact import sanitize_reply
 from web.render import Renderer, is_hx
-from web.services import (access_form_values, access_raw, default_model_label, load_runtime_dict,
+from web.services import (access_form_values, access_raw, load_runtime_dict,
                           model_groups, model_label, parse_access_form, parse_runtime_form, peer_label,
                           peer_link,
                           prompt_view, runtime_form_values, sandbox_reply, save_persona,
@@ -27,7 +26,7 @@ from web.services import (access_form_values, access_raw, default_model_label, l
 HERE = os.path.dirname(__file__)
 
 
-def create_app(settings: Settings, vk_factory=VkClient, ai_factory=AiService) -> FastAPI:
+def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -> FastAPI:
     if not settings.web_password:
         raise RuntimeError("WEB_PASSWORD не задан")
     guard = make_guard(settings.web_password)
@@ -50,12 +49,22 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=AiService) ->
         return app.state.ai
 
     def safe_error(e: Exception) -> str:
-        return sanitize_reply(str(e), (settings.vk_token, *secrets_of(settings)))
+        text = str(e) if app.state.ai is None else app.state.ai.scrub(str(e))
+        return sanitize_reply(text, (settings.vk_token,))
 
     app.include_router(create_router(settings, vk, ai, render, safe_error))
 
     def models_ctx() -> dict:
-        return {"model_groups": model_groups(settings), "default_model": default_model_label(settings)}
+        try:
+            return {"model_groups": model_groups(ai().models()), "default_model": ai().model_id("")}
+        except (AiError, ValueError) as e:
+            return {"model_groups": [], "default_model": safe_error(e)}
+
+    def available_model_ids() -> set[str]:
+        try:
+            return {m.id for m in ai().models()}
+        except (AiError, ValueError):
+            return set()
 
     def status_ctx():
         view = status_view(settings.state_dir, now=time.time(), runtime=load_runtime_dict(settings.runtime_file))
@@ -131,7 +140,7 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=AiService) ->
     async def save_settings(request: Request):
         form = {k: str(v) for k, v in (await request.form()).items()}
         current = load_runtime_dict(settings.runtime_file)
-        allowed = {m.id for m in available_models(settings)}
+        allowed = available_model_ids()
         try:
             rt = parse_runtime({**current, **parse_runtime_form(form, allowed)}, runtime_defaults(settings))
         except ValueError as e:
