@@ -6,17 +6,17 @@ from tests.web.conftest import AUTH
 from web.services import prompt_view
 
 
-def test_prompt_view_layers_for_group_chat(settings):
+def test_prompt_view_layers_for_group_chat(settings, ai_settings):
     open(f"{settings.personas_dir}/v.md", "w").write("# В\nперсона")
     json.dump({"active_persona": "v"}, open(settings.runtime_file, "w"))
-    v = prompt_view(settings, AiService(settings), user_key=None)
+    v = prompt_view(settings, AiService(ai_settings), user_key=None)
     assert [t for t, _ in v.layers] == [SYSTEM_LAYER, PERSONA_LAYER]
     assert v.persona_name == "В" and "персона" in v.message
 
 
-def test_prompt_view_for_private_user(settings):
+def test_prompt_view_for_private_user(settings, ai_settings):
     json.dump({"private_prompt": "лично", "user_prompts": {"@bob": "это Боб"}}, open(settings.access_file, "w"))
-    v = prompt_view(settings, AiService(settings), user_key="@bob")
+    v = prompt_view(settings, AiService(ai_settings), user_key="@bob")
     assert [t for t, _ in v.layers] == [SYSTEM_LAYER, USER_LAYER, PRIVATE_LAYER, PERSONA_LAYER]
     assert "это Боб" in v.message
 
