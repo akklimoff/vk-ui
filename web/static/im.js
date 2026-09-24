@@ -14,13 +14,25 @@ function lastRendered() {
   return row ? { after: row.dataset.id, last_from: row.dataset.from, last_ts: row.dataset.ts } : { after: 0 };
 }
 
+function mmss(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 document.addEventListener("alpine:init", () => {
   Alpine.data("im", (sel) => ({
     sel, pane: sel ? "chat" : "list", filter: "", unreadOnly: false,
     init() {
       this.$el.addEventListener("im-back", () => { this.pane = "list"; });
+      this.$el.addEventListener("im-close", () => this.close());
     },
     open(id) { this.sel = id; this.pane = "chat"; },
+    close() {
+      this.sel = null;
+      this.pane = "list";
+      document.getElementById("chat").innerHTML = document.getElementById("im-empty").innerHTML;
+      history.pushState({}, "", "/im");
+    },
     hotkey(e) {
       // code, а не key: в русской раскладке key — «л»
       if (!(e.ctrlKey || e.metaKey) || e.code !== "KeyK") return;
@@ -36,7 +48,8 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("chat", (peerId, outRead) => ({
-    peerId, outRead, fromBottom: 0, stick: true, readUpTo: 0, settling: false, panel: false,
+    peerId, outRead, fromBottom: 0, stick: true, readUpTo: 0, settling: false, panel: false, viewer: null,
+    atBottom: true, pending: 0, before: 0, raf: 0,
     init() {
       // синхронно, а не в $nextTick: иначе IntersectionObserver успевает увидеть сентинел
       // вверху ещё не прокрученного списка и зря грузит страницу старых
@@ -48,6 +61,7 @@ document.addEventListener("alpine:init", () => {
         const el = this.$refs.list;
         this.fromBottom = el.scrollHeight - el.scrollTop;
         this.stick = this.nearBottom();
+        this.before = Number(lastRendered().after);
       });
       this.$el.addEventListener("htmx:afterSwap", (e) => {
         const state = document.getElementById("chat-state");
@@ -57,6 +71,7 @@ document.addEventListener("alpine:init", () => {
         if (target.classList.contains("im-more")) {
           this.dedupeDays();
           this.$refs.list.scrollTop = this.$refs.list.scrollHeight - this.fromBottom;
+          this.markStuck();
         }
       });
       this.$nextTick(() => this.markRead());
@@ -70,8 +85,14 @@ document.addEventListener("alpine:init", () => {
         this.dedupe();
         if (this.$refs.list.querySelector("[data-id]")) this.$refs.list.querySelector(".im-empty")?.remove();
         if (this.stick) this.scrollBottom();
+        else this.pending += this.arrived();
         this.markRead();
+        this.markStuck();
       });
+    },
+    // счётчик на кнопке «вниз»: входящие, вставленные поллингом, пока лента отмотана вверх
+    arrived() {
+      return [...this.$refs.list.querySelectorAll(".msg:not(.out)")].filter((el) => Number(el.dataset.id) > this.before).length;
     },
     // поллинг, ушедший до отправки, может вернуть уже вставленное отправкой сообщение
     dedupe() {
@@ -96,11 +117,60 @@ document.addEventListener("alpine:init", () => {
       this.readUpTo = last;
       fetch(`/im/${this.peerId}/read`, { method: "POST", headers: { "HX-Request": "true" } });
     },
+    onScroll() {
+      if (this.raf) return;
+      this.raf = requestAnimationFrame(() => {
+        this.raf = 0;
+        this.atBottom = this.nearBottom();
+        if (this.atBottom) this.pending = 0;
+        this.markStuck();
+      });
+    },
+    // sticky сам не сообщает, что упёрся в край: подложку получает последний чип выше кромки прокрутки
+    markStuck() {
+      const list = this.$refs.list;
+      let stuck = null;
+      list.querySelectorAll(".im-day").forEach((chip) => {
+        chip.classList.remove("stuck");
+        if (list.scrollTop > 0 && chip.offsetTop <= list.scrollTop) stuck = chip;
+      });
+      stuck?.classList.add("stuck");
+    },
     nearBottom() {
       const el = this.$refs.list;
       return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     },
-    scrollBottom() { this.$refs.list.scrollTop = this.$refs.list.scrollHeight; },
+    scrollBottom(smooth = false) {
+      this.$refs.list.scrollTo({ top: this.$refs.list.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    },
+  }));
+
+  Alpine.data("voice", (url, duration) => ({
+    playing: false, pos: 0, open: false, audio: null,
+    get pct() { return duration ? Math.min(100, (this.pos / duration) * 100) : 0; },
+    get time() { return mmss(this.playing || this.pos ? this.pos : duration); },
+    ensure() {
+      if (this.audio) return;
+      this.audio = new Audio(url);
+      this.audio.preload = "none";
+      this.audio.addEventListener("timeupdate", () => { this.pos = this.audio.currentTime; });
+      this.audio.addEventListener("ended", () => { this.playing = false; this.pos = 0; });
+      this.audio.addEventListener("error", () => { this.playing = false; toast("Не удалось загрузить голосовое", "bad"); });
+    },
+    toggle() { this.playing ? this.pause() : this.play(); },
+    play() {
+      this.ensure();
+      window.dispatchEvent(new CustomEvent("im-voice-play", { detail: this.$el }));
+      this.audio.play();
+      this.playing = true;
+    },
+    pause() { this.audio?.pause(); this.playing = false; },
+    seek(e) {
+      const box = e.currentTarget.getBoundingClientRect();
+      this.ensure();
+      this.audio.currentTime = this.pos = ((e.clientX - box.left) / box.width) * duration;
+      if (!this.playing) this.play();
+    },
   }));
 
   Alpine.data("readMark", () => ({
@@ -115,6 +185,7 @@ document.addEventListener("alpine:init", () => {
 
   Alpine.data("composer", () => ({
     text: "", reply: null, file: null,
+    get ready() { return this.text.trim().length > 0 || !!this.file; },
     get size() {
       if (!this.file) return "";
       const kb = this.file.size / 1024;
@@ -133,7 +204,7 @@ document.addEventListener("alpine:init", () => {
       this.text = t;
       this.$nextTick(() => { this.grow(); this.$refs.t.focus(); });
     },
-    grow() { const t = this.$refs.t; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; },
+    grow() { const t = this.$refs.t; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 216) + "px"; },
     quote(d) { this.reply = d; this.$refs.t.focus(); },
     reset() {
       this.text = "";

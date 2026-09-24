@@ -23,7 +23,8 @@ CONVERSATIONS = {
     ],
     "profiles": [
         {"id": 11, "first_name": "Вася", "last_name": "Пупкин", "photo_50": "https://cdn.example/u11.jpg", "online": 1},
-        {"id": 22, "first_name": "Аня", "last_name": "Иванова", "photo_50": "https://cdn.example/u22.jpg", "online": 0},
+        {"id": 22, "first_name": "Аня", "last_name": "Иванова", "photo_50": "https://cdn.example/u22.jpg", "online": 0,
+         "sex": 1, "last_seen": {"platform": 7, "time": 1783059300}},
         {"id": ME, "first_name": "Валентина", "last_name": "Тина", "photo_50": "https://cdn.example/me.jpg", "online": 1},
     ],
     "groups": [],

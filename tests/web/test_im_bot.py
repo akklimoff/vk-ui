@@ -86,3 +86,11 @@ def test_bot_forms_without_htmx_redirect_to_chat(client, settings):
     r = client.post(f"/im/{PEER_CHAT}/bot/paused", data={"on": "1"}, auth=AUTH, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == f"/im?sel={PEER_CHAT}"
     assert client.get(f"/im/{PEER_CHAT}/bot", auth=AUTH, follow_redirects=False).status_code == 303
+
+
+def test_panel_has_vk_header_switches_and_persona_chips(client):
+    r = client.get(f"/im/{PEER_CHAT}/bot", auth=AUTH, headers=HX)
+    assert 'class="im-bot-head"' in r.text and "vk-icons.svg#cancel_24" in r.text and '@click="panel = false"' in r.text
+    assert r.text.count('role="switch" class="sw"') >= 5          # 4 режима + «читать без отметки» + участники
+    assert 'class="chip-p"' in r.text and 'name="slug" value="rina"' in r.text
+    assert 'class="vk-btn"' in r.text and ">Сохранить<" in r.text

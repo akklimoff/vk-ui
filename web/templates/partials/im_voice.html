@@ -1,0 +1,18 @@
+{# ожидает a: Attachment(kind='voice'), wid: уникальный id волны в документе #}
+{% set bars = a.waveform|wave_bars(a.duration) %}{% set w = bars|length * 3 - 1 %}
+<div class="voice" x-data='voice({{ a.url|tojson }}, {{ a.duration }})' @im-voice-play.window="if ($event.detail !== $el) pause()">
+  <button type="button" class="play" :aria-label="playing ? 'Пауза' : 'Слушать'" @click="toggle()">
+    <svg class="ico" width="32" height="32" x-show="!playing"><use href="/static/vk-icons.svg#play_circle_32"/></svg>
+    <svg class="ico" width="32" height="32" x-show="playing" x-cloak><use href="/static/vk-icons.svg#pause_circle_32"/></svg>
+  </button>
+  <span class="wave-col">
+    <svg class="wave" width="{{ w }}" height="12" viewBox="0 0 {{ w }} 12" @click="seek($event)">
+      <defs><g id="{{ wid }}">{% for h in bars %}<rect x="{{ loop.index0 * 3 }}" y="{{ (12 - h) / 2 }}" width="2" height="{{ h }}" rx="1"/>{% endfor %}</g>
+        <clipPath id="{{ wid }}c"><rect x="0" y="0" height="12" :width="{{ w }} * pct / 100"/></clipPath></defs>
+      <use href="#{{ wid }}" class="base"/><use href="#{{ wid }}" clip-path="url(#{{ wid }}c)"/>
+    </svg>
+    <span class="dur" x-text="time">{{ a.duration|mmss }}</span>
+  </span>
+  {% if a.transcript %}<button type="button" class="aa" @click="open = !open" aria-label="Расшифровка">Aa</button>
+  <p class="transcript" x-show="open" x-cloak>{{ a.transcript }}</p>{% endif %}
+</div>

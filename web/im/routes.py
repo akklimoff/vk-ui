@@ -49,7 +49,7 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
     def dialogs_ctx():
         access, rt = lists(), runtime()
         dialogs = parse_conversations(vk().conversations(DIALOGS), vk().me_id, marks())
-        return {"dialogs": [(d, bot_mode(d.peer.id, access, rt)) for d in dialogs], "tz": tz}
+        return {"dialogs": [(d, bot_mode(d.peer.id, access, rt)) for d in dialogs], "tz": tz, "now": time.time()}
 
     def rendered_tail(last_from: int | None, last_ts: float | None) -> Message | None:
         if last_from is None or last_ts is None:
@@ -65,9 +65,12 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
             messages = [m for m in messages if m.id > after]
         convs = raw.get("conversations") or []
         peer = peer_of(convs[0], Profiles(raw)) if convs else None
-        return {"peer": peer, "peer_id": peer_id, "rows": rows(messages, time.time(), tz, prev),
+        opening = convs and not after and not before and convs[0].get("unread_count")
+        in_read = int(convs[0].get("in_read", 0)) if opening else None
+        now = time.time()
+        return {"peer": peer, "peer_id": peer_id, "rows": rows(messages, now, tz, prev, in_read),
                 "out_read": out_read, "oldest": messages[0].id if messages and full_page else None,
-                "mode": bot_mode(peer_id, lists(), runtime()), "tz": tz, "page": "im"}
+                "mode": bot_mode(peer_id, lists(), runtime()), "tz": tz, "now": now, "page": "im"}
 
     def guard(call):
         try:

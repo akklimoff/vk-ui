@@ -1,45 +1,58 @@
+{% from "partials/im_icons.html" import icon %}
 {# ожидает chat: dict из chat_ctx #}
 {% set c = chat %}
-<div class="im-chat" x-data="chat({{ c.peer_id }}, {{ c.out_read }})">
-  <header class="im-chat-head">
-    <button type="button" class="back" @click="$dispatch('im-back')" aria-label="Назад">‹</button>
-    <span class="ava">{% if c.peer and c.peer.photo %}<img src="{{ c.peer.photo }}" alt="">{% endif %}</span>
-    <span class="body">
-      <b>{{ c.peer.title if c.peer else c.peer_id|peer_label }}</b>
-      <small class="muted">{% if c.peer and c.peer.kind == 'chat' %}{{ c.peer.members|plural('участник', 'участника', 'участников') }}{% elif c.peer %}{{ 'онлайн' if c.peer.online else 'не в сети' }}{% endif %}</small>
-    </span>
-    <span id="chat-badge">{% with m = c.mode %}{% include "partials/im_badge.html" %}{% endwith %}</span>
-    <a class="open-vk" href="{{ c.peer_id|peer_link }}" title="Открыть в VK" aria-label="Открыть в VK" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><path d="M14 3h7v7h-2V6.4l-9.3 9.3-1.4-1.4L17.6 5H14V3zM5 5h6v2H5v12h12v-6h2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"/></svg></a>
-    <button type="button" class="gear" aria-label="Бот в этом чате" @click="panel = !panel"
-            hx-get="/im/{{ c.peer_id }}/bot" hx-target="#bot-slot" hx-swap="innerHTML" hx-trigger="click once">⚙</button>
-  </header>
-  <div id="bot-slot" class="im-bot-slot" x-show="panel" x-cloak></div>
-  <div id="messages" class="im-messages" x-ref="list">
-    {% if c.oldest %}<div class="im-more" hx-get="/im/{{ c.peer_id }}/messages?before={{ c.oldest }}" hx-trigger="intersect once delay:500ms" hx-swap="outerHTML"></div>{% endif %}
-    {% with rows = c.rows, tz = c.tz %}{% include "partials/im_rows.html" %}{% endwith %}
-    {% if not c.rows %}<div class="im-empty muted">Сообщений пока нет</div>{% endif %}
-  </div>
-  <form class="im-composer" x-data="composer()" method="post" action="/im/{{ c.peer_id }}/send" enctype="multipart/form-data"
-        hx-post="/im/{{ c.peer_id }}/send" hx-target="#messages" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]"
-        hx-vals='js:{...lastRendered()}'
-        @htmx:after-request="if ($event.detail.elt === $el && $event.detail.xhr.status < 300) reset()" @im-reply.window="quote($event.detail)">
-    <div class="quote-bar" x-show="reply" x-cloak><b x-text="reply?.author"></b><span x-text="reply?.text"></span>
-      <button type="button" @click="reply = null" aria-label="Убрать цитату">×</button></div>
-    <small id="composer-error" class="im-composer-error"></small>
-    <input type="hidden" name="reply_to" :value="reply?.id || ''">
-    <div class="file-chip" x-show="file" x-cloak><span x-text="file?.name"></span><span class="muted" x-text="size"></span>
-      <button type="button" @click="clearFile()" aria-label="Убрать файл">×</button></div>
-    <div class="row-input">
-      <label class="attach" title="Голосовое из .ogg/.mp3"><input type="file" name="voice" accept=".ogg,.mp3,audio/ogg,audio/mpeg" x-ref="f" @change="pick()" hidden><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"/></svg></label>
-      <textarea name="text" rows="1" placeholder="Сообщение" x-ref="t" x-model="text" @input="grow()"
-                @keydown.enter="if (!$event.shiftKey && !$event.isComposing) { $event.preventDefault(); $el.form.requestSubmit() }" @keydown.escape="reply = null"></textarea>
-      <button type="button" class="draft" title="Черновик от бота" hx-post="/im/{{ c.peer_id }}/draft" hx-params="none" hx-swap="none"
-              hx-disabled-elt="this" @htmx:after-request="if ($event.detail.xhr.status === 200) draft($event.detail.xhr.responseText)">✨</button>
-      <button type="submit" class="send" aria-label="Отправить"><svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></button>
+<div class="im-chat" x-data="chat({{ c.peer_id }}, {{ c.out_read }})" :class="{ 'with-panel': panel }">
+  <div class="im-convo">
+    <header class="im-chat-head">
+      <button type="button" class="ib close" @click="$dispatch('im-close')" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
+      <button type="button" class="ib back" @click="$dispatch('im-back')" aria-label="Назад">{{ icon('chevron_left_24') }}</button>
+      <span class="ava a32">{% if c.peer and c.peer.photo %}<img src="{{ c.peer.photo }}" alt="">{% elif c.peer %}<i>{{ c.peer.title[:1] }}</i>{% endif %}</span>
+      <span class="body">
+        <span class="line"><b>{{ c.peer.title if c.peer else c.peer_id|peer_label }}</b><span id="chat-badge">{% with m = c.mode %}{% include "partials/im_badge.html" %}{% endwith %}</span></span>
+        <small>{% if c.peer and c.peer.kind == 'chat' %}{{ c.peer.members|plural('участник', 'участника', 'участников') }}{% elif c.peer and c.peer.kind == 'group' %}сообщество{% elif c.peer %}{{ c.peer|presence(c.now, c.tz) }}{% endif %}</small>
+      </span>
+      <a class="ib" href="{{ c.peer_id|peer_link }}" title="Открыть в VK" aria-label="Открыть в VK" target="_blank" rel="noopener">{{ icon('logo_vk_outline_24') }}</a>
+      <button type="button" class="ib" title="Бот в этом чате" aria-label="Бот в этом чате" @click="panel = !panel"
+              hx-get="/im/{{ c.peer_id }}/bot" hx-target="#bot-slot" hx-swap="innerHTML" hx-trigger="click once">{{ icon('robot_outline_24') }}</button>
+    </header>
+    <div class="im-history">
+      <div id="messages" class="im-messages" x-ref="list" @scroll.passive="onScroll()">
+        {% if c.oldest %}<div class="im-more" hx-get="/im/{{ c.peer_id }}/messages?before={{ c.oldest }}" hx-trigger="intersect once delay:500ms" hx-swap="outerHTML"></div>{% endif %}
+        {% with rows = c.rows, tz = c.tz %}{% include "partials/im_rows.html" %}{% endwith %}
+        {% if not c.rows %}<div class="im-empty">Сообщений пока нет</div>{% endif %}
+      </div>
+      <button type="button" class="im-down" x-show="!atBottom" x-cloak @click="scrollBottom(true)" aria-label="К последним сообщениям">{{ icon('chevron_down_24') }}<b x-show="pending" x-text="pending"></b></button>
     </div>
-  </form>
+    <form class="im-composer" x-data="composer()" method="post" action="/im/{{ c.peer_id }}/send" enctype="multipart/form-data"
+          hx-post="/im/{{ c.peer_id }}/send" hx-target="#messages" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]"
+          hx-vals='js:{...lastRendered()}'
+          @htmx:after-request="if ($event.detail.elt === $el && $event.detail.xhr.status < 300) reset()" @im-reply.window="quote($event.detail)">
+      <div class="box">
+        <div class="quote-bar" x-show="reply" x-cloak>{{ icon('reply_24') }}<span class="bar"></span>
+          <span class="body"><b x-text="reply?.author"></b><span x-text="reply?.text"></span></span>
+          <button type="button" class="ib" @click="reply = null" aria-label="Убрать цитату">{{ icon('cancel_20') }}</button></div>
+        <div class="file-chip" x-show="file" x-cloak>{{ icon('document_outline_24') }}<span x-text="file?.name"></span><span class="muted" x-text="size"></span>
+          <button type="button" class="ib" @click="clearFile()" aria-label="Убрать файл">{{ icon('cancel_20') }}</button></div>
+        <small id="composer-error" class="im-composer-error"></small>
+        <input type="hidden" name="reply_to" :value="reply?.id || ''">
+        <div class="row-input">
+          <label class="ib attach" title="Голосовое из .ogg/.mp3"><input type="file" name="voice" accept=".ogg,.mp3,audio/ogg,audio/mpeg" x-ref="f" @change="pick()" hidden>{{ icon('add_circle_outline_24') }}</label>
+          <textarea name="text" rows="1" placeholder="Сообщение" x-ref="t" x-model="text" @input="grow()"
+                    @keydown.enter="if (!$event.shiftKey && !$event.isComposing) { $event.preventDefault(); if (ready) $el.form.requestSubmit() }" @keydown.escape="reply = null"></textarea>
+          <button type="button" class="ib draft" title="Черновик от бота" aria-label="Черновик от бота" hx-post="/im/{{ c.peer_id }}/draft" hx-params="none" hx-swap="none"
+                  hx-disabled-elt="this" @htmx:after-request="if ($event.detail.xhr.status === 200) draft($event.detail.xhr.responseText)">{{ icon('magic_wand_outline_24') }}</button>
+          <button type="submit" class="ib send" :class="{ ready }" @click="if (!ready) $event.preventDefault()" aria-label="Отправить">{{ icon('send_24') }}</button>
+        </div>
+      </div>
+    </form>
+  </div>
+  <div id="bot-slot" class="im-bot-slot" x-show="panel" x-cloak></div>
+  <div class="im-viewer" x-show="viewer" x-cloak @click="viewer = null" @keydown.escape.window="viewer = null">
+    <button type="button" class="ib" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
+    <img :src="viewer" alt="">
+  </div>
   <div id="chat-state" data-out-read="{{ c.out_read }}" hidden></div>
   <div id="chat-poll" hx-get="/im/{{ c.peer_id }}/messages"
        hx-trigger="every 3s [document.visibilityState === 'visible']" hx-target="#messages" hx-swap="beforeend"
-     hx-vals='js:{...lastRendered()}'></div>
+       hx-vals='js:{...lastRendered()}'></div>
 </div>
