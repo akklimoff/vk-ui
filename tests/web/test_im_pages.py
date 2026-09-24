@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.web.conftest import AUTH
+from tests.web.fakes import FakeAi
 from tests.web.im_fixtures import CONVERSATIONS, HISTORY, MEMBERS, ME, PEER_CHAT, PEER_USER, SENT, UPLOADED_VOICE
 from web.app import create_app
 
@@ -51,19 +52,15 @@ class FakeVk:
         return HISTORY["items"]
 
 
-class FakeLlm:
+class DraftAi(FakeAi):
     def __init__(self, settings):
-        self.calls = []
-
-    def reply(self, conversation, asker, **kw):
-        self.calls.append((conversation, asker, kw))
-        return "черновик от llm"
+        super().__init__(settings, parts=("черновик от llm",))
 
 
 @pytest.fixture
 def client(settings):
     open(f"{settings.personas_dir}/rina.md", "w").write("# Рина\nперсона")
-    return TestClient(create_app(settings, vk_factory=FakeVk, llm_factory=FakeLlm), follow_redirects=False)
+    return TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=DraftAi), follow_redirects=False)
 
 
 def test_im_page_lists_dialogs_with_modes(client):

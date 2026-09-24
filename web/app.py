@@ -7,7 +7,8 @@ from fastapi.staticfiles import StaticFiles
 
 from bot.config import Settings
 from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
-from ai.llm import LlmClient, available_models, secrets_of
+from ai.llm import available_models, secrets_of
+from ai.service import AiService
 from bot.status import ReplyLog, write_json_atomic
 from bot.vk import VkClient
 from web.auth import make_guard
@@ -26,7 +27,7 @@ from web.services import (access_form_values, access_raw, default_model_label, l
 HERE = os.path.dirname(__file__)
 
 
-def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -> FastAPI:
+def create_app(settings: Settings, vk_factory=VkClient, ai_factory=AiService) -> FastAPI:
     if not settings.web_password:
         raise RuntimeError("WEB_PASSWORD не задан")
     guard = make_guard(settings.web_password)
@@ -36,22 +37,22 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
                       model_label=model_label, clock=clock, mmss=mmss, plural=plural, preview=preview,
                       since=short_since, presence=presence, wave_bars=wave_bars)
     app.state.vk = None
-    app.state.llm = None
+    app.state.ai = None
 
     def vk():
         if app.state.vk is None:
             app.state.vk = vk_factory(settings.vk_token)
         return app.state.vk
 
-    def llm():
-        if app.state.llm is None:
-            app.state.llm = llm_factory(settings)
-        return app.state.llm
+    def ai():
+        if app.state.ai is None:
+            app.state.ai = ai_factory(settings)
+        return app.state.ai
 
     def safe_error(e: Exception) -> str:
         return sanitize_reply(str(e), (settings.vk_token, *secrets_of(settings)))
 
-    app.include_router(create_router(settings, vk, llm, render, safe_error))
+    app.include_router(create_router(settings, vk, ai, render, safe_error))
 
     def models_ctx() -> dict:
         return {"model_groups": model_groups(settings), "default_model": default_model_label(settings)}
@@ -116,7 +117,7 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
 
     @app.get("/prompts")
     def prompts_page(request: Request, user: str | None = None):
-        view = prompt_view(settings, user or None)
+        view = prompt_view(settings, ai(), user or None)
         keys = sorted((access_raw(settings.access_file).get("user_prompts") or {}).keys())
         return render.page(request, "prompts", {"v": view, "user_keys": keys, "page": "prompts"})
 
@@ -207,7 +208,7 @@ def create_app(settings: Settings, vk_factory=VkClient, llm_factory=LlmClient) -
         except ValueError:
             return render.invalid(request, "sandbox", sandbox_ctx(), "peer_id, count и temperature должны быть числами")
         try:
-            context, reply = sandbox_reply(settings, llm(), vk() if pid is not None else None,
+            context, reply = sandbox_reply(settings, ai(), vk() if pid is not None else None,
                                            persona_slug=persona, conversation=conversation, peer_id=pid,
                                            count=n, asker=asker, temperature=temp, model=model)
         except Exception as e:

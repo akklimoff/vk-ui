@@ -1,33 +1,24 @@
+from ai.service import ReplyRequest
 from bot.access import scoped_prompts
-from ai.parts import split_reply
-from ai.context import own_recent, render_conversation
 from bot.context import to_lines
-from ai.llm import secrets_of
-from ai.personas import load_persona
-from bot.reply import ReplyRequest, generate_reply
+from bot.reply import deliverable
 from bot.runtime import persona_for
 from web.im.views import is_chat
 
 UNKNOWN_ASKER = "Собеседник"
 
 
-def draft_reply(settings, llm, vk, lists, rt, peer_id: int) -> str:
+def draft_reply(settings, ai, vk, lists, rt, peer_id: int) -> str:
     history = vk.history(peer_id, rt.context_messages)
-    lines = to_lines(history, vk.resolve_name, vk.me_id)
-    conversation = render_conversation(lines, settings.message_char_limit, settings.context_char_budget)
     private = not is_chat(peer_id)
     general_prompt, specific_prompt = scoped_prompts(lists, peer_id, private)
     last_other = next((m["from_id"] for m in history if m.get("from_id") != vk.me_id), peer_id if private else None)
-    slug = persona_for(rt, peer_id)
-    persona = load_persona(settings.personas_dir, slug) if slug else None
-    request = ReplyRequest(
-        conversation, vk.resolve_name(last_other) if last_other else UNKNOWN_ASKER, is_private=private,
+    result = ai.reply(ReplyRequest(
+        to_lines(history, vk.resolve_name, vk.me_id),
+        vk.resolve_name(last_other) if last_other else UNKNOWN_ASKER, is_private=private,
         auto_chat=not private and peer_id in lists.auto_reply_peers,
-        persona_prompt=persona.prompt if persona else settings.persona_prompt,
-        private_prompt=general_prompt, user_prompt=specific_prompt,
-        temperature=rt.temperature,
-        own_recent=own_recent(lines), model=rt.active_model,
-    )
-    reply, _ = generate_reply(llm, request, [settings.vk_token, *secrets_of(settings)], vk.me_id)
+        persona=persona_for(rt, peer_id), scope_prompt=general_prompt, user_prompt=specific_prompt,
+        temperature=rt.temperature, model=rt.active_model,
+    ))
     # бот шлёт части по отдельности, а из композера уходит одно сообщение
-    return "\n".join(split_reply(reply))
+    return "\n".join(deliverable(result.parts, [settings.vk_token], vk.me_id))

@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from tests.web.conftest import AUTH
 from tests.web.im_fixtures import PEER_CHAT, PEER_USER
-from tests.web.test_im_pages import FakeLlm, FakeVk
+from tests.web.test_im_pages import DraftAi, FakeVk
 from web.app import create_app
 
 HX = {"HX-Request": "true"}
@@ -15,7 +15,7 @@ HX = {"HX-Request": "true"}
 def client(settings):
     open(f"{settings.personas_dir}/rina.md", "w").write("# Рина\nперсона")
     open(f"{settings.personas_dir}/monika.md", "w").write("# Моника\nперсона")
-    return TestClient(create_app(settings, vk_factory=FakeVk, llm_factory=FakeLlm), follow_redirects=False)
+    return TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=DraftAi), follow_redirects=False)
 
 
 def access(settings):

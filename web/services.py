@@ -1,13 +1,12 @@
 import os
 from dataclasses import dataclass
 
+from ai.llm import PROVIDERS, available_models, find_model, resolve_provider
+from ai.personas import load_persona, persona_path, render_persona
+from ai.service import ReplyRequest
 from bot.access import AccessFile, join_lines, parse_access, scoped_prompts
 from bot.config import parse_ids
-from ai.context import render_conversation
 from bot.context import to_lines
-from ai.llm import (PERSONA_LAYER, PRIVATE_LAYER, PROVIDERS, SYSTEM_LAYER, USER_LAYER,
-                     available_models, compose_system_message, find_model, resolve_provider)
-from ai.personas import load_persona, persona_path, render_persona
 from bot.status import read_json, write_json_atomic
 
 CONNECTED_WITHIN = 90.0
@@ -141,21 +140,15 @@ def access_raw(path: str) -> dict:
     return read_json(path, {})
 
 
-def prompt_view(settings, user_key: str | None) -> PromptView:
+def prompt_view(settings, ai, user_key: str | None) -> PromptView:
     slug = load_runtime_dict(settings.runtime_file).get("active_persona", "")
     persona = load_persona(settings.personas_dir, slug) if slug else None
-    persona_name = persona.name if persona else "по умолчанию"
-    persona_prompt = persona.prompt if persona else settings.persona_prompt
     raw = access_raw(settings.access_file)
     user_prompt = join_lines((raw.get("user_prompts") or {}).get(user_key)) if user_key else ""
     private_prompt = join_lines(raw.get("private_prompt")) if user_key else ""
-    layers = [(SYSTEM_LAYER, settings.system_prompt), (USER_LAYER, user_prompt),
-              (PRIVATE_LAYER, private_prompt), (PERSONA_LAYER, persona_prompt)]
-    return PromptView(
-        persona_slug=slug, persona_name=persona_name, user_key=user_key,
-        message=compose_system_message(settings.system_prompt, user_prompt, private_prompt, persona_prompt),
-        layers=[(t, x.strip()) for t, x in layers if x.strip()],
-    )
+    preview = ai.system_preview(slug, scope_prompt=private_prompt, user_prompt=user_prompt)
+    return PromptView(persona_slug=slug, persona_name=persona.name if persona else "по умолчанию",
+                      user_key=user_key, message=preview.message, layers=list(preview.layers))
 
 
 ACCESS_LIST_FIELDS = ("blocked_users", "blocked_peers", "allowed_peers", "auto_reply_users",
@@ -216,20 +209,19 @@ def peer_link(peer_id: int) -> str:
     return f"https://vk.com/im?sel={sel}"
 
 
-def sandbox_reply(settings, llm, vk, *, persona_slug: str, conversation: str, peer_id: int | None,
+def sandbox_reply(settings, ai, vk, *, persona_slug: str, conversation: str, peer_id: int | None,
                   count: int, asker: str, temperature: float, model: str = "") -> tuple[str, str]:
-    persona = load_persona(settings.personas_dir, persona_slug) if persona_slug else None
-    persona_prompt = persona.prompt if persona else settings.persona_prompt
-    is_private, auto_chat, general_prompt, specific_prompt = False, False, "", ""
+    request = ReplyRequest((), asker, persona=persona_slug, temperature=temperature, model=model,
+                           transcript=conversation)
     if peer_id is not None:
-        history = vk.history(peer_id, count)
-        conversation = render_conversation(to_lines(history, vk.resolve_name, vk.me_id),
-                                           settings.message_char_limit, settings.context_char_budget)
         is_private = peer_id < GROUP_CHAT_PEER_BASE
         lists = AccessFile(settings.access_file, vk.resolve_screen_names).current()
         general_prompt, specific_prompt = scoped_prompts(lists, peer_id, is_private)
-        auto_chat = peer_id in lists.auto_reply_peers or peer_id in lists.onboarding_peers
-    reply = llm.reply(conversation, asker, is_private=is_private, private_prompt=general_prompt,
-                      user_prompt=specific_prompt, persona_prompt=persona_prompt,
-                      temperature=temperature, auto_chat=auto_chat, model=model)
-    return conversation, reply
+        request = ReplyRequest(
+            to_lines(vk.history(peer_id, count), vk.resolve_name, vk.me_id), asker, is_private=is_private,
+            auto_chat=peer_id in lists.auto_reply_peers or peer_id in lists.onboarding_peers,
+            persona=persona_slug, scope_prompt=general_prompt, user_prompt=specific_prompt,
+            temperature=temperature, model=model,
+        )
+    result = ai.reply(request)
+    return result.conversation, "\n".join(result.parts)

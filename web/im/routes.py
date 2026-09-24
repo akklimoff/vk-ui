@@ -29,7 +29,7 @@ SWITCHES = {
 }
 
 
-def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
+def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
     router = APIRouter()
     tz = ZoneInfo(settings.web_timezone)
     # один WatchedFile на процесс: перечитывание и разрешение @ников только при смене mtime,
@@ -153,7 +153,7 @@ def create_router(settings, vk, llm, render, safe_error) -> APIRouter:
     @router.post("/im/{peer_id}/draft")
     def bot_draft(peer_id: int):
         try:
-            return PlainTextResponse(draft_reply(settings, llm(), vk(), lists(), runtime(), peer_id))
+            return PlainTextResponse(draft_reply(settings, ai(), vk(), lists(), runtime(), peer_id))
         except Exception as e:
             raise HTTPException(502, f"Не удалось получить черновик: {safe_error(e)}")
 

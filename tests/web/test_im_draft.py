@@ -1,16 +1,9 @@
+from ai.context import Line
 from bot.access import AccessLists
 from bot.runtime import RuntimeSettings
 from tests.web.im_fixtures import HISTORY, ME, PEER_CHAT
+from tests.web.fakes import FakeAi
 from web.im.draft import draft_reply
-
-
-class Llm:
-    def __init__(self):
-        self.calls = []
-
-    def reply(self, conversation, asker, **kw):
-        self.calls.append((conversation, asker, kw))
-        return "ну и ладно"
 
 
 class Vk:
@@ -24,18 +17,15 @@ class Vk:
 
 
 def test_draft_uses_chat_persona_layers_and_last_speaker(settings):
-    open(f"{settings.personas_dir}/rina.md", "w").write("# Рина\nты рина")
-    llm = Llm()
+    ai = FakeAi(parts=("ну и ладно",))
     lists = AccessLists(auto_reply_peers=frozenset({PEER_CHAT}), peer_prompts={PEER_CHAT: "тут все свои"}, chat_prompt="беседа")
     rt = RuntimeSettings(active_persona="valentina", peer_personas=((PEER_CHAT, ("rina",)),), temperature=0.5)
-    text = draft_reply(settings, llm, Vk(), lists, rt, PEER_CHAT)
+    text = draft_reply(settings, ai, Vk(), lists, rt, PEER_CHAT)
     assert text == "ну и ладно"
-    conversation, asker, kw = llm.calls[-1]
-    assert asker == "Вася Пупкин" and "Ты: ну все тогда" in conversation
-    assert kw["persona_prompt"] == "ты рина" and kw["user_prompt"] == "тут все свои" and kw["private_prompt"] == "беседа"
-    assert kw["auto_chat"] and not kw["is_private"] and kw["temperature"] == 0.5
-    assert kw["own_recent"] == ["ну все тогда"]
-
+    req = ai.requests[-1]
+    assert req.asker == "Вася Пупкин" and Line("", "ну все тогда", True) in req.lines
+    assert req.persona == "rina" and req.user_prompt == "тут все свои" and req.scope_prompt == "беседа"
+    assert req.auto_chat and not req.is_private and req.temperature == 0.5
 
 def test_draft_joins_split_parts_and_survives_chat_without_other_speakers(settings):
     class OnlyMe(Vk):
@@ -46,8 +36,7 @@ def test_draft_joins_split_parts_and_survives_chat_without_other_speakers(settin
             assert uid != PEER_CHAT, "id беседы не пользователь"
             return super().resolve_name(uid)
 
-    llm = Llm()
-    llm.reply = lambda conversation, asker, **kw: llm.calls.append((conversation, asker, kw)) or "раз ||| два"
-    text = draft_reply(settings, llm, OnlyMe(), AccessLists(), RuntimeSettings(), PEER_CHAT)
+    ai = FakeAi(parts=("раз", "два"))
+    text = draft_reply(settings, ai, OnlyMe(), AccessLists(), RuntimeSettings(), PEER_CHAT)
     assert text == "раз\nдва"
-    assert llm.calls[-1][1] == "Собеседник" and not llm.calls[-1][2]["auto_chat"]
+    assert ai.requests[-1].asker == "Собеседник" and not ai.requests[-1].auto_chat
