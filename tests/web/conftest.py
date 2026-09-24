@@ -16,7 +16,6 @@ def settings(tmp_path):
         vk_token="vk", web_password="pw",
         access_file=str(tmp_path / "config" / "access.json"),
         runtime_file=str(tmp_path / "config" / "runtime.json"),
-        moderation_file=str(tmp_path / "config" / "moderation.json"),
         personas_dir=str(tmp_path / "config" / "personas"),
         state_dir=str(tmp_path / "state"),
         _env_file=None,

@@ -9,7 +9,6 @@ from bot.config import parse_ids
 from bot.context import to_lines
 from bot.reply import deliverable
 from bot.status import read_json, write_json_atomic
-from common.moderation import ModerationConfig
 
 CONNECTED_WITHIN = 90.0
 
@@ -221,47 +220,3 @@ def sandbox_reply(settings, ai, vk, *, persona_slug: str, conversation: str, pee
     result = ai.reply(request)
     parts = deliverable(result.parts, [settings.vk_token], vk.me_id if vk is not None else None)
     return result.conversation, "\n".join(parts)
-
-
-@dataclass(frozen=True)
-class ChatRow:
-    peer_id: int
-    title: str
-    members: int
-    can_moderate: bool
-    checked: bool
-
-
-@dataclass(frozen=True)
-class FriendRow:
-    user_id: int
-    name: str
-    photo: str
-    checked: bool
-    is_friend: bool
-
-
-def moderation_view(vk, cfg: ModerationConfig) -> dict:
-    chats = []
-    for conv in vk.chats():
-        s = conv.get("chat_settings", {})
-        peer_id = conv["peer"]["id"]
-        chats.append(ChatRow(peer_id, s.get("title") or f"беседа {peer_id}", s.get("members_count") or 0,
-                             bool(s.get("acl", {}).get("can_moderate")), peer_id in cfg.admin_peers))
-    gone = cfg.admin_peers - {c.peer_id for c in chats}
-    chats += [ChatRow(p, f"беседа {p} — владельца в ней нет", 0, False, True) for p in sorted(gone)]
-    friends = [FriendRow(f["id"], f"{f['first_name']} {f['last_name']}", f.get("photo_50", ""),
-                         f["id"] in cfg.trusted_users, True) for f in vk.friends()]
-    lost = cfg.trusted_users - {f.user_id for f in friends}
-    friends += [FriendRow(u, f"id{u} — не в друзьях, прав нет", "", True, False) for u in sorted(lost)]
-    return {"chats": chats, "friends": friends}
-
-
-def parse_moderation_form(form: list[tuple[str, str]]) -> ModerationConfig:
-    def ids(key: str) -> frozenset[int]:
-        values = [v.strip() for k, v in form if k == key]
-        if not all(v.isdigit() for v in values):
-            raise ValueError("Неверный id в форме")
-        return frozenset(int(v) for v in values)
-
-    return ModerationConfig(ids("peer"), ids("user"))
