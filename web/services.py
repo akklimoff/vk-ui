@@ -7,6 +7,7 @@ from ai.service import ReplyRequest
 from bot.access import AccessFile, join_lines, parse_access, scoped_prompts
 from bot.config import parse_ids
 from bot.context import to_lines
+from bot.reply import deliverable
 from bot.status import read_json, write_json_atomic
 
 CONNECTED_WITHIN = 90.0
@@ -224,4 +225,5 @@ def sandbox_reply(settings, ai, vk, *, persona_slug: str, conversation: str, pee
             temperature=temperature, model=model,
         )
     result = ai.reply(request)
-    return result.conversation, "\n".join(result.parts)
+    parts = deliverable(result.parts, [settings.vk_token], vk.me_id if vk is not None else None)
+    return result.conversation, "\n".join(parts)

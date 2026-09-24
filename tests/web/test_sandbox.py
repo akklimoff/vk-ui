@@ -83,3 +83,14 @@ def test_sandbox_llm_failure_returns_422_with_reason_and_hides_secrets(settings)
     r = client.post("/sandbox", data=data, auth=AUTH, headers=HX)
     assert r.status_code == 422 and "timeout" in r.text and "key k" not in r.text and "[скрыто]" in r.text
     assert client.post("/sandbox", data=data, auth=AUTH).status_code == 400
+
+
+def test_sandbox_shows_what_the_bot_would_send(settings):
+    class TaggingAi(FakeAi):
+        def __init__(self, settings):
+            super().__init__(settings, parts=("[id1|Валя] тут, токен vk", "[id1|]"))
+
+    client = TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=TaggingAi), follow_redirects=False)
+    r = client.post("/sandbox", data={"persona": "", "conversation": "", "peer_id": "2000000001", "count": "10",
+                                      "asker": "Вася", "temperature": "0.5"}, auth=AUTH, headers=HX)
+    assert r.status_code == 200 and "Валя тут, токен [скрыто]" in r.text and "[id1|" not in r.text
