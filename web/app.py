@@ -17,7 +17,7 @@ from web.im.views import presence, preview, wave_bars
 from ai.personas import list_personas, load_persona
 from common.redact import sanitize_reply
 from web.render import Renderer, is_hx
-from web.services import (access_form_values, access_raw, load_runtime_dict,
+from web.services import (PromptView, access_form_values, access_raw, load_runtime_dict,
                           model_groups, model_label, parse_access_form, parse_runtime_form, peer_label,
                           peer_link,
                           prompt_view, runtime_form_values, sandbox_reply, save_persona,
@@ -126,7 +126,11 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
 
     @app.get("/prompts")
     def prompts_page(request: Request, user: str | None = None):
-        view = prompt_view(settings, ai(), user or None)
+        try:
+            view = prompt_view(settings, ai(), user or None)
+        except (AiError, ValueError) as e:
+            view = PromptView(persona_slug="", persona_name="", user_key=user or None,
+                              message=safe_error(e), layers=[])
         keys = sorted((access_raw(settings.access_file).get("user_prompts") or {}).keys())
         return render.page(request, "prompts", {"v": view, "user_keys": keys, "page": "prompts"})
 
@@ -141,6 +145,10 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         form = {k: str(v) for k, v in (await request.form()).items()}
         current = load_runtime_dict(settings.runtime_file)
         allowed = available_model_ids()
+        if not allowed:
+            # без списка моделей в форме нет выбора, и пустое поле затёрло бы выбранную модель
+            form["active_model"] = current.get("active_model", "")
+            allowed = {form["active_model"]} - {""}
         try:
             rt = parse_runtime({**current, **parse_runtime_form(form, allowed)}, runtime_defaults(settings))
         except ValueError as e:

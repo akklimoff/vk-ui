@@ -113,3 +113,22 @@ def test_settings_page_survives_unreachable_ai_service(settings):
     client = TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=unreachable_ai), follow_redirects=False)
     r = client.get("/settings", auth=AUTH)
     assert r.status_code == 200 and "ИИ-сервис недоступен" in r.text
+
+
+def test_prompts_page_survives_unreachable_ai_service(settings):
+    client = TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=unreachable_ai), follow_redirects=False)
+    r = client.get("/prompts", auth=AUTH)
+    assert r.status_code == 200 and "ИИ-сервис недоступен" in r.text
+
+
+def test_saving_settings_with_ai_down_keeps_the_chosen_model(settings):
+    import json
+
+    json.dump({"active_model": "claude-opus-5"}, open(settings.runtime_file, "w"))
+    client = TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=unreachable_ai), follow_redirects=False)
+    r = client.post("/settings", data={"temperature": "0.5", "reply_delay_min": "1", "reply_delay_max": "2",
+                                       "context_messages": "20", "dm_debounce_seconds": "8", "active_model": "",
+                                       "paused_peers": ""}, auth=AUTH)
+    assert r.status_code == 303
+    saved = json.load(open(settings.runtime_file))
+    assert saved["active_model"] == "claude-opus-5" and saved["temperature"] == 0.5
