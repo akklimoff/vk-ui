@@ -177,7 +177,8 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
             data = parse_access_form(form)
         except ValueError as e:
             return render.invalid(request, "access", {"v": form, "page": "access"}, str(e))
-        write_json_atomic(settings.access_file, data)
+        # форма показывает не все ключи файла: agent_users и agent_peers владелец ведёт руками
+        write_json_atomic(settings.access_file, {**access_raw(settings.access_file), **data})
         return render.saved(request, "access", {"v": access_form_values(settings.access_file), "page": "access"},
                             toast="Сохранено", redirect="/access")
 

@@ -28,6 +28,16 @@ def test_save_access_roundtrip(client, settings):
     assert "@bob: б" in page
 
 
+def test_saving_the_form_keeps_the_keys_it_does_not_show(client, settings):
+    with open(settings.access_file, "w", encoding="utf-8") as f:
+        json.dump({"agent_users": ["@masha", 7], "agent_peers": [2000000001], "blocked_users": ["5"]}, f)
+    r = client.post("/access", data={**BLANK, "blocked_users": "1"}, auth=AUTH)
+    assert r.status_code == 303
+    saved = json.load(open(settings.access_file))
+    assert saved["agent_users"] == ["@masha", 7] and saved["agent_peers"] == [2000000001]
+    assert saved["blocked_users"] == ["1"]
+
+
 def test_invalid_peer_returns_400(client):
     r = client.post("/access", data={"blocked_users": "", "blocked_peers": "abc", "allowed_peers": "",
                                      "auto_reply_users": "", "private_prompt": "", "user_prompts": ""}, auth=AUTH)
