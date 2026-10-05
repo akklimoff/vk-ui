@@ -27,6 +27,12 @@ def test_replies_page_shows_newest_first(client, settings):
     assert page.index("второй") < page.index("первый") and "тег" in page
 
 
+def test_replies_page_shows_stage_timings(client, settings):
+    ReplyLog(f"{settings.state_dir}/replies.jsonl").append(
+        ReplyRecord(1.0, 2000000001, 5, 10, 20, "r", None, 3.4, "v", stages={"vk": 0.4, "ai": 3.0}))
+    assert "(vk 0.4, ai 3.0)" in client.get("/replies", auth=AUTH).text
+
+
 def test_delete_calls_vk(client):
     r = client.post("/replies/21/delete", auth=AUTH)
     assert r.status_code == 303
