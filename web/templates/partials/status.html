@@ -1,4 +1,5 @@
 <article id="status" hx-get="/" hx-trigger="every 5s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
   <header class="row">
     {% if s.connected %}<span class="badge ok">● подключён</span>{% else %}<span class="badge bad">● не подключён</span>{% endif %}
     {% if s.paused %}<span class="badge">на паузе</span>{% endif %}
@@ -6,13 +7,32 @@
   </header>
   <div class="stats">
     <div class="stat"><small>персона</small><b>{{ s.active_persona or "по умолчанию" }}</b></div>
-    <div class="stat"><small>модель</small><b>{{ s.provider or "—" }}</b> <span class="muted">{{ s.model }}</span></div>
+    <div class="stat"><small>модель последнего ответа</small><b>{{ s.model or "ещё не отвечала" }}</b>{% if s.next_model %} <span class="muted">дальше — {{ s.next_model }}</span>{% endif %}</div>
     <div class="stat"><small>последнее событие</small><b>{{ s.last_event_ago|ago }}</b></div>
     <div class="stat"><small>последний ответ</small><b>{{ s.last_reply_ago|ago }}</b></div>
     <div class="stat"><small>ошибок за час</small><b class="{{ 'bad' if s.errors_last_hour }}">{{ s.errors_last_hour }}</b></div>
     <div class="stat"><small>аптайм</small><b>{{ s.uptime|duration }}</b></div>
   </div>
-  {% if s.interviews %}<p class="muted">На знакомстве: {% for peer, user, asked in s.interviews %}<a href="https://vk.com/id{{ user }}">id{{ user }}</a> в {{ peer|peer_label }} ({{ asked }} вопр.){{ ", " if not loop.last }}{% endfor %}</p>{% endif %}
+  {% if s.last %}{% set r = s.last.record %}<section class="status-block">
+    <b>Последняя просьба</b> <span class="badge {{ s.last.outcome_kind }}">{{ s.last.outcome }}</span>
+    <p class="reply-text">{{ r.request }}</p>
+    <p class="muted">{{ s.last.who }} <a href="https://vk.com/id{{ r.from_id }}">id{{ r.from_id }}</a> · {{ r.peer_id|peer_label if r.place == "chat" else s.last.where }} · <a href="/journal">весь журнал</a></p>
+  </section>{% endif %}
+  {% if s.pending %}<section class="status-block">
+    <b>Ждёт «да»</b>
+    {% for p in s.pending %}<div class="status-row">
+      <div>{{ p.title }} <span class="muted">· {{ p.peer_id|peer_label }} · <a href="https://vk.com/id{{ p.user_id }}">id{{ p.user_id }}</a> · ещё {{ p.seconds_left|duration }}</span></div>
+      {% for name, value in p.params %}<div class="call-param"><span class="muted">{{ name }}:</span> {{ value }}</div>{% endfor %}
+    </div>{% endfor %}
+  </section>{% endif %}
+  {% if s.rejections %}<section class="status-block">
+    <b>Почему промолчала</b> <small class="muted">последние сообщения с тегом, на которые агент не ответил; текст сообщений не хранится</small>
+    {% for r in s.rejections %}<div class="row status-row">
+      <span class="trust-name"><span data-ts="{{ r.ts }}" x-data x-text="localTime($el.dataset.ts)"></span>
+        · <a href="{{ r.peer_id|peer_link }}">{{ r.peer_id|peer_label }}</a>{% if r.from_id > 0 %} · <a href="https://vk.com/id{{ r.from_id }}">id{{ r.from_id }}</a>{% endif %}
+        · {{ r.reason }}{% if r.count > 1 %} <span class="muted">×{{ r.count }}</span>{% endif %}</span>
+    </div>{% endfor %}
+  </section>{% endif %}
   <form method="post" action="/settings/pause" hx-post="/settings/pause" hx-target="#status" hx-swap="outerHTML">
     <button class="{{ 'contrast' if s.paused else 'secondary' }}">{{ "Возобновить" if s.paused else "Поставить на паузу" }}</button>
   </form>

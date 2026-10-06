@@ -13,50 +13,6 @@ from bot.context import to_lines
 from bot.reply import deliverable
 from bot.status import read_json, write_json_atomic
 
-CONNECTED_WITHIN = 90.0
-
-
-@dataclass(frozen=True)
-class StatusView:
-    connected: bool
-    me_id: int | None
-    me_name: str
-    provider: str
-    model: str
-    active_persona: str
-    paused: bool
-    errors_last_hour: int
-    last_event_ago: float | None
-    last_reply_ago: float | None
-    uptime: float | None
-    interviews: list[tuple[int, int, int]]
-
-
-def status_view(state_dir: str, now: float, runtime: dict | None = None) -> StatusView:
-    """`runtime` — желаемое состояние из runtime.json; status.json отстаёт от него на flush бота."""
-    d = read_json(f"{state_dir}/status.json", {})
-    desired = d if runtime is None else runtime
-    interviews = [(int(peer), int(user), int(iv.get("asked", 0)))
-                  for peer, users in read_json(f"{state_dir}/onboarding.json", {}).items()
-                  for user, iv in users.items() if not iv.get("done")]
-
-    def ago(ts):
-        return None if ts is None else round(now - ts, 1)
-
-    last_event = d.get("last_event_at")
-    chosen = find_model(desired.get("active_model", ""))
-    return StatusView(
-        connected=last_event is not None and now - last_event < CONNECTED_WITHIN,
-        me_id=d.get("me_id"), me_name=d.get("me_name", ""),
-        provider=chosen.provider if chosen else d.get("provider", ""),
-        model=chosen.label if chosen else d.get("model", ""),
-        active_persona=desired.get("active_persona", ""), paused=bool(desired.get("paused")),
-        errors_last_hour=int(d.get("errors_last_hour", 0)),
-        last_event_ago=ago(last_event), last_reply_ago=ago(d.get("last_reply_at")),
-        uptime=ago(d.get("started_at")), interviews=interviews,
-    )
-
-
 def _object_or_empty(path: str) -> dict:
     data = read_json(path, {})
     return data if isinstance(data, dict) else {}

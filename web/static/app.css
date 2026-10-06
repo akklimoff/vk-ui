@@ -159,3 +159,7 @@ article > header > small { display: block; font-weight: normal; }
 .calls li { list-style: none; padding: 0.45rem 0; border-top: 1px solid var(--pico-muted-border-color); }
 .call-param { overflow-wrap: anywhere; font-size: 0.9em; }
 .journal-meta { font-size: 0.85em; margin: 0.25rem 0; }
+
+.status-block { margin: var(--pico-spacing) 0; padding-top: 0.6rem; border-top: 1px solid var(--pico-muted-border-color); }
+.status-row { padding: 0.35rem 0; justify-content: space-between; }
+.status-row form { margin: 0; }

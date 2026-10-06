@@ -16,11 +16,11 @@ from web.im.routes import create_router
 from web.im.views import presence, preview, wave_bars
 from ai.personas import list_personas, load_persona
 from common.redact import sanitize_reply
-from web import journal, trust
+from web import journal, state, trust
 from web.render import Renderer, is_hx
 from web.services import (BrokenConfig, PromptView, access_raw, load_runtime_dict, model_groups, model_label,
                           parse_runtime_form, peer_label, peer_link, prompt_view, read_config_for_update,
-                          runtime_form_values, sandbox_reply, save_persona, save_runtime_patch, status_view)
+                          runtime_form_values, sandbox_reply, save_persona, save_runtime_patch)
 
 HERE = os.path.dirname(__file__)
 
@@ -65,8 +65,15 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         except (AiError, ValueError):
             return set()
 
+    def trusted_now() -> trust.TrustLists:
+        try:
+            return trust.load(settings.access_file)
+        except ValueError:
+            return trust.TrustLists()
+
     def status_ctx():
-        view = status_view(settings.state_dir, now=time.time(), runtime=load_runtime_dict(settings.runtime_file))
+        view = state.status_view(settings.state_dir, now=time.time(),
+                                 runtime=load_runtime_dict(settings.runtime_file), lists=trusted_now())
         return {"s": view, "page": "status"}
 
     @app.get("/")
@@ -172,7 +179,7 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         except BrokenConfig as e:
             return render.invalid(request, "status", status_ctx(), str(e))
         return render.saved(request, "status", status_ctx(),
-                            toast="Бот на паузе" if paused else "Бот снова отвечает", redirect="/")
+                            toast="Агент на паузе" if paused else "Агент снова слушает", redirect="/")
 
     def trust_ctx(form: dict | None = None):
         try:
