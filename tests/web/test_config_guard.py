@@ -19,9 +19,9 @@ ACCESS_WRITES = [
     ("/access/peers", {"ref": "2000000009"}),
     (f"/access/peers/{PEER_CHAT}/remove", {}),
     (f"/access/peers/{PEER_CHAT}/note", {"text": "новая заметка"}),
-    (f"/im/{PEER_CHAT}/bot/prompt", {"text": "новая заметка"}),
+    (f"/im/{PEER_CHAT}/bot/note", {"text": "новая заметка"}),
     (f"/im/{PEER_CHAT}/bot/members/11", {"on": "1"}),
-    (f"/im/{PEER_CHAT}/bot/auto", {"on": "1"}),
+    (f"/im/{PEER_CHAT}/bot/listens", {"on": "1"}),
 ]
 RUNTIME_WRITES = [
     ("/settings", SETTINGS_FORM),
@@ -90,7 +90,7 @@ def test_broken_runtime_keeps_the_entered_settings(client, settings):
 
 def test_broken_access_keeps_the_entered_chat_note(client, settings):
     spoil(settings.access_file, TRAILING_COMMA)
-    r = client.post(f"/im/{PEER_CHAT}/bot/prompt", data={"text": "новая заметка"}, auth=AUTH, headers=HX)
+    r = client.post(f"/im/{PEER_CHAT}/bot/note", data={"text": "новая заметка"}, auth=AUTH, headers=HX)
     assert 'class="error"' in r.text and "access.json" in r.text and ">новая заметка</textarea>" in r.text
 
 
@@ -114,7 +114,7 @@ class VkWithoutMembers(FakeVk):
 def test_refusal_names_the_file_even_when_the_panel_cannot_be_rebuilt(settings):
     client = TestClient(create_app(settings, vk_factory=VkWithoutMembers, ai_factory=DraftAi), follow_redirects=False)
     before = spoil(settings.access_file, TRAILING_COMMA)
-    r = client.post(f"/im/{PEER_CHAT}/bot/prompt", data={"text": "новая заметка"}, auth=AUTH, headers=HX)
+    r = client.post(f"/im/{PEER_CHAT}/bot/note", data={"text": "новая заметка"}, auth=AUTH, headers=HX)
     assert r.status_code == 422
     assert "access.json" in json.loads(r.headers["HX-Trigger"])["toast"]["text"]
     assert read_bytes(settings.access_file) == before

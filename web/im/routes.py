@@ -10,25 +10,19 @@ from bot.access import AccessFile
 from ai.personas import list_personas
 from bot.runtime import RuntimeFile, runtime_defaults
 from bot.agent.journal import ActionLog
-from bot.status import write_json_atomic
-from web.im.controls import set_keyed_text, set_member, set_paused_peer, set_peer_blocked, set_peer_personas
+from web import trust
+from web.im.controls import set_paused_peer, set_peer_personas
 from web.im.draft import draft_reply
 from web.im.marks import bot_marks
 from web.im.modes import bot_mode, chat_controls
 from web.im.views import Message, Profiles, is_chat, parse_conversations, parse_history, peer_of, rows
 from web.im.voice import MAX_VOICE_BYTES, prepare_voice
 from web.render import is_hx
-from web.services import BrokenConfig, read_config_for_update
+from web.services import update_config
 
 DIALOGS = 60
 PAGE = 40
 POLL_WINDOW = 50
-SWITCHES = {
-    "auto": ("access", "auto_reply_users", "auto_reply_peers"),
-    "blocked": ("access", "blocked_users", "blocked_peers"),
-    "onboarding": ("access", None, "onboarding_peers"),
-    "paused": ("runtime", "paused_peers", "paused_peers"),
-}
 
 
 def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
@@ -51,7 +45,8 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
     def dialogs_ctx():
         access, rt = lists(), runtime()
         dialogs = parse_conversations(vk().conversations(DIALOGS), vk().me_id, marks())
-        return {"dialogs": [(d, bot_mode(d.peer.id, access, rt)) for d in dialogs], "tz": tz, "now": time.time()}
+        return {"dialogs": [(d, bot_mode(d.peer.id, access, rt, vk().me_id)) for d in dialogs], "tz": tz,
+                "now": time.time()}
 
     def rendered_tail(last_from: int | None, last_ts: float | None) -> Message | None:
         if last_from is None or last_ts is None:
@@ -72,7 +67,7 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
         now = time.time()
         return {"peer": peer, "peer_id": peer_id, "rows": rows(messages, now, tz, prev, in_read),
                 "out_read": out_read, "oldest": messages[0].id if messages and full_page else None,
-                "mode": bot_mode(peer_id, lists(), runtime()), "tz": tz, "now": now, "page": "im"}
+                "mode": bot_mode(peer_id, lists(), runtime(), vk().me_id), "tz": tz, "now": now, "page": "im"}
 
     def guard(call):
         try:
@@ -165,7 +160,8 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
         profiles = Profiles(raw)
         members = [(m["member_id"], profiles.name(m["member_id"]), profiles.photo(m["member_id"]))
                    for m in raw.get("items") or [] if m["member_id"] != vk().me_id and m["member_id"] > 0]
-        return {"peer_id": peer_id, "mode": bot_mode(peer_id, access, rt), "c": chat_controls(peer_id, access, rt),
+        return {"peer_id": peer_id, "mode": bot_mode(peer_id, access, rt, vk().me_id),
+                "c": chat_controls(peer_id, access, rt, vk().me_id),
                 "members": members, "personas": list_personas(settings.personas_dir),
                 "active": rt.active_persona, "page": "im"}
 
@@ -178,7 +174,7 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
     def bot_page(request: Request, peer_id: int):
         return bot_panel(request, peer_id)
 
-    def not_saved(request: Request, peer_id: int, error: BrokenConfig, **entered):
+    def not_saved(request: Request, peer_id: int, error: ValueError, **entered):
         if not is_hx(request):
             return render.invalid(request, "im_bot", {}, str(error))
         try:
@@ -187,17 +183,42 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
             return render.invalid(request, "im_error", {"page": "im"}, str(error))
         return render.invalid(request, "im_bot", {**ctx, "c": replace(ctx["c"], **entered)}, str(error))
 
-    @router.post("/im/{peer_id}/bot/prompt")
-    def bot_prompt(request: Request, peer_id: int, text: str = Form("")):
+    def chats_only(peer_id: int) -> None:
+        if not is_chat(peer_id):
+            raise HTTPException(404, "только для бесед")
+
+    def trust_change(request: Request, peer_id: int, change, toast: str, **entered):
+        try:
+            trust.save(settings.access_file, change)
+        except ValueError as e:
+            return not_saved(request, peer_id, e, **entered)
+        return bot_panel(request, peer_id, toast=toast)
+
+    @router.post("/im/{peer_id}/bot/note")
+    def bot_note(request: Request, peer_id: int, text: str = Form("")):
+        chats_only(peer_id)
         # браузер отправляет переводы строк textarea как CRLF, а в заметке они хранятся как \n
         text = text.replace("\r\n", "\n")
-        field = "peer_prompts" if is_chat(peer_id) else "user_prompts"
+        return trust_change(request, peer_id, lambda lists: trust.set_note(lists, peer_id, text), "Заметка сохранена",
+                            note=text)
+
+    @router.post("/im/{peer_id}/bot/listens")
+    def bot_listens(request: Request, peer_id: int, on: str = Form("")):
+        chats_only(peer_id)
+        change = trust.trust_peer if on else trust.untrust_peer
+        return trust_change(request, peer_id, lambda lists: change(lists, peer_id),
+                            "Агент слушает эту беседу" if on else "Агент больше не слушает эту беседу")
+
+    def runtime_change(request: Request, peer_id: int, change, toast: str):
         try:
-            stored = read_config_for_update(settings.access_file)
-        except BrokenConfig as e:
-            return not_saved(request, peer_id, e, prompt=text)
-        write_json_atomic(settings.access_file, set_keyed_text(stored, field, peer_id, text, vk().resolve_screen_names))
-        return bot_panel(request, peer_id, toast="Промпт сохранён")
+            update_config(settings.runtime_file, change)
+        except ValueError as e:
+            return not_saved(request, peer_id, e)
+        return bot_panel(request, peer_id, toast=toast)
+
+    @router.post("/im/{peer_id}/bot/paused")
+    def bot_paused(request: Request, peer_id: int, on: str = Form("")):
+        return runtime_change(request, peer_id, lambda stored: set_paused_peer(stored, peer_id, bool(on)), "Сохранено")
 
     @router.post("/im/{peer_id}/bot/personas")
     def bot_personas(request: Request, peer_id: int, slug: list[str] = Form([])):
@@ -205,40 +226,17 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
         unknown = [s for s in slug if s not in known]
         if unknown:
             return render.invalid(request, "im_bot", guard(lambda: bot_ctx(peer_id)), f"Нет персоны: {', '.join(unknown)}")
-        try:
-            stored = read_config_for_update(settings.runtime_file)
-        except BrokenConfig as e:
-            return not_saved(request, peer_id, e)
-        write_json_atomic(settings.runtime_file, set_peer_personas(stored, peer_id, slug))
-        return bot_panel(request, peer_id, toast="Персоны сохранены")
+        return runtime_change(request, peer_id, lambda stored: set_peer_personas(stored, peer_id, slug),
+                              "Персоны сохранены")
 
     @router.post("/im/{peer_id}/bot/members/{user_id}")
     def bot_member(request: Request, peer_id: int, user_id: int, on: str = Form("")):
-        try:
-            stored = read_config_for_update(settings.access_file)
-        except BrokenConfig as e:
-            return not_saved(request, peer_id, e)
-        data = set_peer_blocked(stored, peer_id, user_id, bool(on), vk().resolve_screen_names)
-        write_json_atomic(settings.access_file, data)
-        return bot_panel(request, peer_id, toast="Сохранено")
-
-    @router.post("/im/{peer_id}/bot/{switch}")
-    def bot_switch(request: Request, peer_id: int, switch: str, on: str = Form("")):
-        if switch not in SWITCHES:
-            raise HTTPException(404)
-        target, user_field, peer_field = SWITCHES[switch]
-        field = peer_field if is_chat(peer_id) else user_field
-        if field is None:
-            raise HTTPException(404, "только для бесед")
-        path = settings.runtime_file if target == "runtime" else settings.access_file
-        try:
-            stored = read_config_for_update(path)
-        except BrokenConfig as e:
-            return not_saved(request, peer_id, e)
-        if target == "runtime":
-            write_json_atomic(path, set_paused_peer(stored, peer_id, bool(on)))
-        else:
-            write_json_atomic(path, set_member(stored, field, peer_id, bool(on), vk().resolve_screen_names))
-        return bot_panel(request, peer_id, toast="Сохранено")
+        chats_only(peer_id)
+        if on:
+            return trust_change(request, peer_id, lambda lists: trust.trust_user(lists, user_id),
+                                "Человек в доверенных")
+        resolve = vk().resolve_screen_names
+        return trust_change(request, peer_id, lambda lists: trust.untrust_user_id(lists, user_id, resolve),
+                            "Человек убран из доверенных")
 
     return router

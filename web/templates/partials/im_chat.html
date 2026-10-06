@@ -12,7 +12,7 @@
         <small>{% if c.peer and c.peer.kind == 'chat' %}{{ c.peer.members|plural('участник', 'участника', 'участников') }}{% elif c.peer and c.peer.kind == 'group' %}сообщество{% elif c.peer %}{{ c.peer|presence(c.now, c.tz) }}{% endif %}</small>
       </span>
       <a class="ib" href="{{ c.peer_id|peer_link }}" title="Открыть в VK" aria-label="Открыть в VK" target="_blank" rel="noopener">{{ icon('logo_vk_outline_24') }}</a>
-      <button type="button" class="ib" title="Бот в этом чате" aria-label="Бот в этом чате" @click="panel = !panel"
+      <button type="button" class="ib" title="Агент в этом чате" aria-label="Агент в этом чате" @click="panel = !panel"
               hx-get="/im/{{ c.peer_id }}/bot" hx-target="#bot-slot" hx-swap="innerHTML" hx-trigger="click once">{{ icon('robot_outline_24') }}</button>
     </header>
     <div class="im-history">

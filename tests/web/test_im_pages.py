@@ -69,7 +69,7 @@ def test_im_page_lists_dialogs_with_modes(client):
     assert "лампочки" in r.text and "Аня Иванова" in r.text
     assert "Стикер" in r.text                       # превью последнего сообщения
     assert 'class="unread quiet">2<' in r.text          # беседа в фикстуре без звука
-    assert r.text.count("по тегу") >= 2              # бейдж режима у каждого диалога
+    assert r.text.count("не слушает") >= 2           # бейдж у каждого диалога: ни один чат не в доверенных
     assert 'href="/im"' in r.text and "Мессенджер" in r.text
 
 
