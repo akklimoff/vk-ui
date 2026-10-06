@@ -1,6 +1,8 @@
 import json
 import os
+import threading
 from dataclasses import dataclass
+from typing import Callable
 
 from ai.catalog import find_model
 from ai.personas import load_persona, persona_path, render_persona
@@ -133,10 +135,20 @@ def model_label(model_id: str) -> str:
     return found.label if found else model_id
 
 
+CONFIG_WRITES = threading.Lock()
+
+
+def update_config(path: str, change: Callable[[dict], dict]) -> dict:
+    """Чтение, правка и запись файла настроек одним куском. Роуты выполняются в пуле потоков: без блокировки
+    две правки подряд прочли бы один и тот же файл, и вторая запись стёрла бы первую."""
+    with CONFIG_WRITES:
+        data = change(read_config_for_update(path))
+        write_json_atomic(path, data)
+    return data
+
+
 def save_runtime_patch(path: str, **fields) -> None:
-    data = read_config_for_update(path)
-    data.update(fields)
-    write_json_atomic(path, data)
+    update_config(path, lambda data: {**data, **fields})
 
 
 def save_persona(personas_dir: str, slug: str, name: str, prompt: str) -> None:
