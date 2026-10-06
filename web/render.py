@@ -20,7 +20,7 @@ NAV = (
     NavItem("/", "Статус", "status", "pulse_outline_20"),
     NavItem("/personas", "Персоны", "personas", "users_outline_20"),
     NavItem("/prompts", "Промпт", "prompts", "text_outline_20"),
-    NavItem("/access", "Доступ", "access", "key_outline_20"),
+    NavItem("/access", "Доверие", "access", "key_outline_20"),
     NavItem("/settings", "Настройки", "settings", "gear_outline_20"),
     NavItem("/replies", "Ответы", "replies", "reply_outline_20"),
     NavItem("/sandbox", "Песочница", "sandbox", "robot_outline_20"),

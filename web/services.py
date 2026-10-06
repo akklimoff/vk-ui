@@ -7,7 +7,7 @@ from typing import Callable
 from ai.catalog import find_model
 from ai.personas import load_persona, persona_path, render_persona
 from ai.contract import ReplyRequest
-from bot.access import AccessFile, join_lines, legacy_lists, parse_access, scoped_prompts
+from bot.access import AccessFile, join_lines, scoped_prompts
 from bot.config import parse_ids
 from bot.context import to_lines
 from bot.reply import deliverable
@@ -182,82 +182,6 @@ def prompt_view(settings, ai, user_key: str | None) -> PromptView:
     preview = ai.system_preview(slug, scope_prompt=private_prompt, user_prompt=user_prompt)
     return PromptView(persona_slug=slug, persona_name=persona.name if persona else "по умолчанию",
                       user_key=user_key, message=preview.message, layers=list(preview.layers))
-
-
-ACCESS_LIST_FIELDS = ("blocked_users", "blocked_peers", "allowed_peers", "auto_reply_users",
-                      "auto_reply_peers", "onboarding_peers")
-
-
-def _lines(text: str) -> list[str]:
-    return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
-
-
-def _keyed_prompts(field: str, text: str) -> dict:
-    prompts = {}
-    for line in _lines(text):
-        key, sep, value = line.partition(":")
-        if not sep or not key.strip():
-            raise ValueError(f"Строка {field} без «ключ: текст»: {line!r}")
-        prompts[key.strip()] = value.strip()
-    return prompts
-
-
-NOTE_FIELDS = ("user_prompts", "peer_prompts")
-
-
-def _fits_one_line(field: str, key: str, note) -> bool:
-    if not isinstance(note, str):
-        return False
-    try:
-        return _keyed_prompts(field, f"{key}: {note}") == {key: note}
-    except ValueError:
-        return False
-
-
-def _one_line_notes(raw: dict, field: str) -> dict:
-    return {k: v for k, v in (raw.get(field) or {}).items() if _fits_one_line(field, k, v)}
-
-
-def unlisted_notes(raw: dict, field: str) -> dict:
-    """Заметки, которые строка «ключ: текст» исказила бы (многострочные, с пробелами по краям):
-    форма доступа их не показывает и сохраняет как есть."""
-    return {k: v for k, v in (raw.get(field) or {}).items() if not _fits_one_line(field, k, v)}
-
-
-def unlisted_note_keys(path: str) -> dict[str, list[str]]:
-    raw = access_raw(path)
-    return {field: list(unlisted_notes(raw, field)) for field in NOTE_FIELDS}
-
-
-def parse_access_form(form: dict, stored: dict | None = None) -> dict:
-    """`stored` — нынешний access.json: из него берутся заметки, которых в форме нет."""
-    data = {field: _lines(form.get(field, "")) for field in ACCESS_LIST_FIELDS}
-    data["private_prompt"] = _lines(form.get("private_prompt", ""))
-    data["chat_prompt"] = _lines(form.get("chat_prompt", ""))
-    for field in NOTE_FIELDS:
-        data[field] = {**unlisted_notes(stored or {}, field), **_keyed_prompts(field, form.get(field, ""))}
-    data["peer_blocked_users"] = {k: v.replace(",", " ").split()
-                                  for k, v in _keyed_prompts("peer_blocked_users",
-                                                             form.get("peer_blocked_users", "")).items()}
-    try:
-        # разбор бота прощает ошибки в старых ключах, а форма должна их назвать
-        legacy_lists(data, lambda names: frozenset())
-        parse_access(data, resolve_screen_names=lambda names: frozenset())
-    except Exception as e:
-        raise ValueError(f"Некорректные значения: {e}") from e
-    return data
-
-
-def access_form_values(path: str) -> dict:
-    raw = access_raw(path)
-    values = {field: "\n".join(str(x) for x in raw.get(field) or []) for field in ACCESS_LIST_FIELDS}
-    values["private_prompt"] = join_lines(raw.get("private_prompt"))
-    values["chat_prompt"] = join_lines(raw.get("chat_prompt"))
-    for field in NOTE_FIELDS:
-        values[field] = "\n".join(f"{k}: {v}" for k, v in _one_line_notes(raw, field).items())
-    values["peer_blocked_users"] = "\n".join(f"{k}: {' '.join(str(x) for x in v or [])}"
-                                              for k, v in (raw.get("peer_blocked_users") or {}).items())
-    return values
 
 
 GROUP_CHAT_PEER_BASE = 2_000_000_000

@@ -14,10 +14,12 @@ TRAILING_COMMA = '{"agent_users": ["@masha"], "agent_peers": [2000000001], "peer
 NOT_AN_OBJECT = '["agent_users"]'
 SETTINGS_FORM = {"temperature": "0.5", "reply_delay_min": "1", "reply_delay_max": "2", "context_messages": "20",
                  "dm_debounce_seconds": "8", "active_model": "", "paused_peers": ""}
-ACCESS_FORM = {"blocked_users": "1", "blocked_peers": "", "allowed_peers": "", "auto_reply_users": "",
-               "private_prompt": "", "user_prompts": ""}
 ACCESS_WRITES = [
-    ("/access", ACCESS_FORM),
+    ("/access/users", {"ref": "5"}),
+    ("/access/users/remove", {"ref": "5"}),
+    ("/access/peers", {"ref": "2000000009"}),
+    (f"/access/peers/{PEER_CHAT}/remove", {}),
+    (f"/access/peers/{PEER_CHAT}/note", {"text": "новая заметка"}),
     (f"/im/{PEER_CHAT}/bot/prompt", {"text": "новая заметка"}),
     (f"/im/{PEER_CHAT}/bot/members/11", {"on": "1"}),
     (f"/im/{PEER_CHAT}/bot/auto", {"on": "1"}),
@@ -74,10 +76,11 @@ def test_htmx_save_over_broken_file_is_422_and_leaves_it_untouched(client, setti
     assert read_bytes(getattr(settings, which)) == before
 
 
-def test_broken_access_keeps_the_entered_form(client, settings):
+def test_broken_access_is_named_on_the_trust_page(client, settings):
     spoil(settings.access_file, TRAILING_COMMA)
-    r = client.post("/access", data={**ACCESS_FORM, "blocked_users": "777"}, auth=AUTH, headers=HX)
-    assert 'class="error"' in r.text and "access.json" in r.text and ">777</textarea>" in r.text
+    r = client.post("/access/users", data={"ref": "777"}, auth=AUTH, headers=HX)
+    assert 'class="error"' in r.text and "access.json" in r.text
+    assert "access.json" in client.get("/access", auth=AUTH).text
 
 
 def test_broken_runtime_keeps_the_entered_settings(client, settings):

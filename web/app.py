@@ -16,12 +16,11 @@ from web.im.routes import create_router
 from web.im.views import presence, preview, wave_bars
 from ai.personas import list_personas, load_persona
 from common.redact import sanitize_reply
+from web import trust
 from web.render import Renderer, is_hx
-from web.services import (BrokenConfig, PromptView, access_form_values, access_raw, load_runtime_dict,
-                          model_groups, model_label, parse_access_form, parse_runtime_form, peer_label,
-                          peer_link,
-                          prompt_view, read_config_for_update, runtime_form_values, sandbox_reply, save_persona,
-                          save_runtime_patch, status_view, unlisted_note_keys)
+from web.services import (BrokenConfig, PromptView, access_raw, load_runtime_dict, model_groups, model_label,
+                          parse_runtime_form, peer_label, peer_link, prompt_view, read_config_for_update,
+                          runtime_form_values, sandbox_reply, save_persona, save_runtime_patch, status_view)
 
 HERE = os.path.dirname(__file__)
 
@@ -175,25 +174,56 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         return render.saved(request, "status", status_ctx(),
                             toast="Бот на паузе" if paused else "Бот снова отвечает", redirect="/")
 
-    def access_ctx(entered: dict | None = None):
-        values = access_form_values(settings.access_file) if entered is None else entered
-        return {"v": values, "unlisted": unlisted_note_keys(settings.access_file), "page": "access"}
+    def trust_ctx(form: dict | None = None):
+        try:
+            lists = trust.load(settings.access_file)
+        except ValueError as e:
+            return {"t": None, "broken": str(e), "form": form or {}, "page": "access"}
+        return {"t": trust.trust_view(lists, vk), "broken": "", "form": form or {}, "page": "access"}
+
+    def trust_change(request: Request, change, toast: str, form: dict | None = None):
+        try:
+            trust.save(settings.access_file, change)
+        except ValueError as e:
+            return render.invalid(request, "access", trust_ctx(form), str(e))
+        return render.saved(request, "access", trust_ctx(), toast=toast, redirect="/access")
 
     @app.get("/access")
     def access_page(request: Request):
-        return render.page(request, "access", access_ctx())
+        return render.page(request, "access", trust_ctx())
 
-    @app.post("/access")
-    async def save_access(request: Request):
-        form = {k: str(v) for k, v in (await request.form()).items()}
+    @app.post("/access/users")
+    def trust_person(request: Request, ref: str = Form("")):
+        form = {"user_ref": ref}
         try:
-            stored = read_config_for_update(settings.access_file)
-            data = parse_access_form(form, stored)
+            user_id = trust.user_ref(ref, lambda names: vk().resolve_screen_names(names))
         except ValueError as e:
-            return render.invalid(request, "access", access_ctx(form), str(e))
-        # форма показывает не все ключи файла: agent_users и agent_peers владелец ведёт руками
-        write_json_atomic(settings.access_file, {**stored, **data})
-        return render.saved(request, "access", access_ctx(), toast="Сохранено", redirect="/access")
+            return render.invalid(request, "access", trust_ctx(form), str(e))
+        return trust_change(request, lambda lists: trust.trust_user(lists, user_id), "Добавлен в доверенные", form)
+
+    @app.post("/access/users/remove")
+    def untrust_person(request: Request, ref: str = Form("")):
+        def resolve(names):
+            return vk().resolve_screen_names(names)
+
+        return trust_change(request, lambda lists: trust.untrust_ref(lists, ref, resolve), "Убран из доверенных")
+
+    @app.post("/access/peers")
+    def trust_chat(request: Request, ref: str = Form("")):
+        form = {"peer_ref": ref}
+        try:
+            peer_id = trust.peer_ref(ref)
+        except ValueError as e:
+            return render.invalid(request, "access", trust_ctx(form), str(e))
+        return trust_change(request, lambda lists: trust.trust_peer(lists, peer_id), "Беседа в доверенных", form)
+
+    @app.post("/access/peers/{peer_id}/remove")
+    def untrust_chat(request: Request, peer_id: int):
+        return trust_change(request, lambda lists: trust.untrust_peer(lists, peer_id), "Беседа убрана из доверенных")
+
+    @app.post("/access/peers/{peer_id}/note")
+    def chat_note(request: Request, peer_id: int, text: str = Form("")):
+        return trust_change(request, lambda lists: trust.set_note(lists, peer_id, text), "Заметка сохранена")
 
     @app.get("/replies")
     def replies_page(request: Request, peer: int | None = None, after: float = 0.0):

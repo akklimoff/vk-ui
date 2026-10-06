@@ -1,32 +1,49 @@
-<form id="access-form" method="post" action="/access" hx-post="/access" hx-target="#access-form" hx-swap="outerHTML">
+<div id="trust">
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if broken %}<article><div class="error">{{ broken }}</div>
+    <p class="muted">Пока файл не исправлен, агент работает по спискам, которые прочитал в последний раз.</p></article>
+  {% else %}
+  {% if t.vk_error %}<p class="muted">{{ t.vk_error }}</p>{% endif %}
   <article>
-    {% if error %}<div class="error">{{ error }}</div>{% endif %}
-    <details open>
-      <summary><b>Списки</b> <span class="muted">кто и где</span></summary>
-      {% for field, title, hint in [
-        ("blocked_users", "Заблокированные пользователи", "id или @ник, по одному в строке"),
-        ("blocked_peers", "Заблокированные чаты", "peer_id, по одному в строке"),
-        ("allowed_peers", "Белый список чатов", "пусто — все"),
-        ("auto_reply_users", "Автоответ в личке", "id или @ник — бот отвечает без тега"),
-        ("auto_reply_peers", "Беседы с автоответом", "peer_id — бот отвечает всем без тега"),
-        ("onboarding_peers", "Беседы со знакомством новичков", "peer_id")] %}
-      <label>{{ title }} <small>{{ hint }}</small>
-        <textarea name="{{ field }}" class="mono" style="min-height:4.5rem" x-data="autogrow" @input="grow()">{{ v[field] }}</textarea></label>
-      {% endfor %}
-    </details>
-    <details open>
-      <summary><b>Промпты</b> <span class="muted">слои системного сообщения</span></summary>
-      {% for field, title, hint in [
-        ("private_prompt", "private_prompt", "личка, общий для всех собеседников"),
-        ("user_prompts", "user_prompts", "«@ник: текст», по одному в строке"),
-        ("chat_prompt", "chat_prompt", "беседы с автоответом, общий"),
-        ("peer_prompts", "peer_prompts", "«peer_id: текст», по одному в строке"),
-        ("peer_blocked_users", "peer_blocked_users", "кого игнорировать в беседе: «peer_id: @ник id …», по одной беседе в строке")] %}
-      <label>{{ title }} <small>{{ hint }}</small>
-        <textarea name="{{ field }}" class="mono" style="min-height:4.5rem" x-data="autogrow" @input="grow()">{{ v[field] }}</textarea>
-        {% if unlisted and unlisted.get(field) %}<small>Здесь не показаны и сохраняются как есть заметки не в одну строку: {{ unlisted[field]|join(", ") }}. Их правят в мессенджере, в панели бота нужного чата.</small>{% endif %}</label>
-      {% endfor %}
-    </details>
-    <footer class="sticky-actions"><button>Сохранить</button></footer>
+    <header><b>Доверенные люди</b>
+      <small class="muted">Их просьбы с тегом агент выполняет в доверенных беседах: читает беседу и пишет в неё. Удалять и писать наружу может только владелец.</small></header>
+    {% for u in t.users %}<div class="row trust-row">
+      <span class="trust-name">{% if u.user_id %}<a href="https://vk.com/id{{ u.user_id }}">{{ u.name or "id" ~ u.user_id }}</a> <span class="muted">id{{ u.user_id }}{% if u.ref[:1] == "@" %} · по нику {{ u.ref }} из файла{% endif %}</span>{% else %}{{ u.ref }} <span class="muted">ник из файла</span>{% if u.missing %} <span class="badge bad">не найден</span>{% endif %}{% endif %}</span>
+      <form method="post" action="/access/users/remove" hx-post="/access/users/remove" hx-target="#trust" hx-swap="outerHTML">
+        <input type="hidden" name="ref" value="{{ u.ref }}">
+        <button class="outline secondary">Убрать</button>
+      </form>
+    </div>{% else %}<p class="muted">Никого: в беседах агент слушает только владельца.</p>{% endfor %}
+    <form class="row" method="post" action="/access/users" hx-post="/access/users" hx-target="#trust" hx-swap="outerHTML">
+      <input class="trust-input" name="ref" value="{{ form.user_ref }}" placeholder="id, @ник или ссылка на страницу" aria-label="Кого добавить" required>
+      <button>Добавить</button>
+    </form>
   </article>
-</form>
+  <article>
+    <header><b>Доверенные беседы</b>
+      <small class="muted">Только в них агент откликается на тег. В личных диалогах он не работает; «Избранное» владельца слышит всегда.</small></header>
+    {% for p in t.peers %}<section class="trust-chat">
+      <div class="row trust-row">
+        <span class="trust-name"><a href="{{ p.peer_id|peer_link }}">{{ p.title or p.peer_id|peer_label }}</a> <span class="muted">{{ p.peer_id }}</span>
+          {% if not p.trusted %}<span class="badge">не доверенная</span>{% endif %}
+          {% if p.left %}<span class="badge bad">аккаунт не в беседе</span>{% endif %}</span>
+        {% if p.trusted %}<form method="post" action="/access/peers/{{ p.peer_id }}/remove" hx-post="/access/peers/{{ p.peer_id }}/remove" hx-target="#trust" hx-swap="outerHTML">
+          <button class="outline secondary">Не доверять</button>
+        </form>{% else %}<form method="post" action="/access/peers" hx-post="/access/peers" hx-target="#trust" hx-swap="outerHTML">
+          <input type="hidden" name="ref" value="{{ p.peer_id }}">
+          <button class="outline">Доверять</button>
+        </form>{% endif %}
+      </div>
+      <form method="post" action="/access/peers/{{ p.peer_id }}/note" hx-post="/access/peers/{{ p.peer_id }}/note" hx-target="#trust" hx-swap="outerHTML">
+        <label>Заметка о беседе <small>что агенту стоит знать об этой беседе; правила безопасности она не отменяет</small>
+          <textarea name="text" style="min-height:4.5rem" x-data="autogrow" @input="grow()">{{ p.note }}</textarea></label>
+        <button class="outline">Сохранить заметку</button>
+      </form>
+    </section>{% else %}<p class="muted">Доверенных бесед нет: агент слышит только владельца в «Избранном».</p>{% endfor %}
+    <form class="row" method="post" action="/access/peers" hx-post="/access/peers" hx-target="#trust" hx-swap="outerHTML">
+      <input class="trust-input" name="ref" value="{{ form.peer_ref }}" placeholder="peer_id беседы или её номер" aria-label="Какую беседу добавить" required>
+      <button>Доверять</button>
+    </form>
+  </article>
+  {% endif %}
+</div>

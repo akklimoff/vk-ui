@@ -1,116 +1,162 @@
-import html
 import json
-import os
-import re
+
+import pytest
+from fastapi.testclient import TestClient
 
 from tests.web.conftest import AUTH
-from web.services import parse_access_form
-
-
-def test_parse_access_form_builds_config():
-    data = parse_access_form({
-        "blocked_users": "123\n@spam", "blocked_peers": "2000000005", "allowed_peers": "",
-        "auto_reply_users": "@bob", "private_prompt": "лично\nдве строки",
-        "user_prompts": "@bob: это Боб\n@ann: это Аня",
-    })
-    assert data["blocked_users"] == ["123", "@spam"]
-    assert data["allowed_peers"] == []
-    assert data["private_prompt"] == ["лично", "две строки"]
-    assert data["user_prompts"] == {"@bob": "это Боб", "@ann": "это Аня"}
-
-
-def test_save_access_roundtrip(client, settings):
-    r = client.post("/access", data={"blocked_users": "1", "blocked_peers": "", "allowed_peers": "",
-                                     "auto_reply_users": "@bob", "private_prompt": "п",
-                                     "user_prompts": "@bob: б"}, auth=AUTH)
-    assert r.status_code == 303
-    saved = json.load(open(settings.access_file))
-    assert saved["auto_reply_users"] == ["@bob"] and saved["user_prompts"] == {"@bob": "б"}
-    page = client.get("/access", auth=AUTH).text
-    assert "@bob: б" in page
-
-
-def test_saving_the_form_keeps_the_keys_it_does_not_show(client, settings):
-    with open(settings.access_file, "w", encoding="utf-8") as f:
-        json.dump({"agent_users": ["@masha", 7], "agent_peers": [2000000001], "blocked_users": ["5"]}, f)
-    r = client.post("/access", data={**BLANK, "blocked_users": "1"}, auth=AUTH)
-    assert r.status_code == 303
-    saved = json.load(open(settings.access_file))
-    assert saved["agent_users"] == ["@masha", 7] and saved["agent_peers"] == [2000000001]
-    assert saved["blocked_users"] == ["1"]
-
-
-def test_invalid_peer_returns_400(client):
-    r = client.post("/access", data={"blocked_users": "", "blocked_peers": "abc", "allowed_peers": "",
-                                     "auto_reply_users": "", "private_prompt": "", "user_prompts": ""}, auth=AUTH)
-    assert r.status_code == 400
-
+from tests.web.fakes import FakeAi
+from web.app import create_app
 
 HX = {"HX-Request": "true"}
-BLANK = {"blocked_users": "", "blocked_peers": "", "allowed_peers": "", "auto_reply_users": "",
-         "private_prompt": "", "user_prompts": ""}
+CHAT, LEFT_CHAT = 2000000001, 2000000002
 
 
-def test_save_access_hx_returns_form_partial_with_toast(client):
-    r = client.post("/access", data={**BLANK, "auto_reply_users": "@bob"}, auth=AUTH, headers=HX)
-    assert r.status_code == 200 and "<html" not in r.text and 'id="access-form"' in r.text
-    assert "@bob" in r.text and "toast" in r.headers["HX-Trigger"]
+class TrustVk:
+    me_id = 1
+
+    def __init__(self, token):
+        pass
+
+    def call(self, method, params):
+        if method == "users.get":
+            known = {"5": {"id": 5, "first_name": "Маша", "last_name": "Иванова", "screen_name": "id5"},
+                     "11": {"id": 11, "first_name": "Вася", "last_name": "Пупкин", "screen_name": "vasya"},
+                     "vasya": {"id": 11, "first_name": "Вася", "last_name": "Пупкин", "screen_name": "vasya"}}
+            return [known[ref] for ref in params["user_ids"].split(",") if ref in known]
+        return {"items": [{"peer": {"id": CHAT}, "chat_settings": {"title": "лампочки", "state": "in"}},
+                          {"peer": {"id": LEFT_CHAT}, "chat_settings": {"title": "старая беседа", "state": "left"}}]}
+
+    def resolve_screen_names(self, names):
+        return frozenset({"masha": 77, "vasya": 11}[name] for name in names if name in ("masha", "vasya"))
 
 
-def test_invalid_peer_hx_returns_422_with_error_and_kept_input(client, settings):
-    r = client.post("/access", data={**BLANK, "blocked_peers": "abc"}, auth=AUTH, headers=HX)
-    assert r.status_code == 422 and 'class="error"' in r.text and ">abc</textarea>" in r.text
-    assert not os.path.exists(settings.access_file)
+@pytest.fixture
+def client(settings):
+    return TestClient(create_app(settings, vk_factory=TrustVk, ai_factory=FakeAi), follow_redirects=False)
 
 
-def posted_back(client) -> dict:
-    """Форма страницы в том виде, в каком её отправит браузер: переводы строк в textarea — CRLF."""
-    page = client.get("/access", auth=AUTH).text
-    fields = re.findall(r'<textarea name="(\w+)"[^>]*>(.*?)</textarea>', page, re.S)
-    return {name: html.unescape(text).replace("\n", "\r\n") for name, text in fields}
-
-
-AWKWARD_NOTES = {
-    "peer_prompts": {"2000000001": "тут друзья\n2000000002: шутки", "2000000003": "одна строка",
-                     "2000000004": "абзац\n\nещё абзац", "2000000005": "  с отступом ",
-                     "2000000006": ["строка", "ещё строка"], "2000000007": "ссылка: https://vk.com"},
-    "user_prompts": {"@bob": "это Боб\nлюбит кофе", "@ann": "это Аня", "42": "без двоеточия\nстрока"},
-}
-
-
-def store_awkward_notes(settings) -> None:
-    with open(settings.access_file, "w", encoding="utf-8") as f:
-        json.dump(AWKWARD_NOTES, f, ensure_ascii=False)
-
-
-def stored(settings) -> dict:
+def stored(settings):
     with open(settings.access_file, encoding="utf-8") as f:
         return json.load(f)
 
 
-def test_posting_the_rendered_form_back_keeps_every_note(client, settings):
-    store_awkward_notes(settings)
-    r = client.post("/access", data=posted_back(client), auth=AUTH)
-    assert r.status_code == 303
-    assert stored(settings)["peer_prompts"] == AWKWARD_NOTES["peer_prompts"]
-    assert stored(settings)["user_prompts"] == AWKWARD_NOTES["user_prompts"]
+def write(settings, data):
+    with open(settings.access_file, "w", encoding="utf-8") as f:
+        f.write(data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))
 
 
-def test_one_line_notes_stay_editable_next_to_kept_ones(client, settings):
-    store_awkward_notes(settings)
-    form = posted_back(client)
-    assert form["peer_prompts"].splitlines() == ["2000000003: одна строка", "2000000007: ссылка: https://vk.com"]
-    form["peer_prompts"] = "2000000003: по-новому\r\n2000000009: новая беседа"
-    client.post("/access", data=form, auth=AUTH)
-    saved = stored(settings)["peer_prompts"]
-    assert saved["2000000003"] == "по-новому" and saved["2000000009"] == "новая беседа"
-    assert "2000000007" not in saved
-    assert saved["2000000001"] == "тут друзья\n2000000002: шутки" and saved["2000000004"] == "абзац\n\nещё абзац"
+def test_page_names_people_and_chats(client, settings):
+    write(settings, {"agent_users": [5, "@sasha"], "agent_peers": [CHAT, LEFT_CHAT],
+                     "peer_prompts": {str(CHAT): "первая\nвторая"}})
+    page = client.get("/access", auth=AUTH).text
+    assert "Маша Иванова" in page and "@sasha" in page
+    assert "лампочки" in page and "старая беседа" in page
+    assert page.count("аккаунт не в беседе") == 1
+    assert "первая\nвторая</textarea>" in page
+    assert "Доверие" in page and "blocked_users" not in page and "auto_reply" not in page
+    assert page.count("не найден") == 1
 
 
-def test_page_names_the_notes_it_does_not_show(client, settings):
-    store_awkward_notes(settings)
-    for page in (client.get("/access", auth=AUTH).text,
-                 client.post("/access", data=posted_back(client), auth=AUTH, headers=HX).text):
-        assert "2000000001, 2000000004, 2000000005, 2000000006" in page and "@bob, 42" in page
-        assert "шутки" not in page
+def test_nick_from_the_file_is_shown_with_the_person_it_points_to(client, settings):
+    write(settings, {"agent_users": ["@vasya"]})
+    page = client.get("/access", auth=AUTH).text
+    assert "Вася Пупкин" in page and "id11" in page and "@vasya" in page and "не найден" not in page
+
+
+def test_removing_a_person_removes_the_nick_that_points_to_them(client, settings):
+    write(settings, {"agent_users": [11, "@vasya", 5]})
+    client.post("/access/users/remove", data={"ref": "11"}, auth=AUTH)
+    assert stored(settings)["agent_users"] == [5]
+    write(settings, {"agent_users": [11, "@vasya", 5]})
+    client.post("/access/users/remove", data={"ref": "@vasya"}, auth=AUTH)
+    assert stored(settings)["agent_users"] == [5]
+
+
+def test_person_stays_trusted_and_the_page_says_so_when_the_nick_cannot_be_checked(settings):
+    class NoNicksVk(TrustVk):
+        def resolve_screen_names(self, names):
+            raise RuntimeError("нет связи")
+
+    write(settings, {"agent_users": [11, "@vasya"]})
+    client = TestClient(create_app(settings, vk_factory=NoNicksVk, ai_factory=FakeAi), follow_redirects=False)
+    r = client.post("/access/users/remove", data={"ref": "11"}, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and 'class="error"' in r.text and "@vasya" in r.text
+    assert stored(settings)["agent_users"] == [11, "@vasya"]
+
+
+def test_empty_page_says_who_is_heard(client):
+    page = client.get("/access", auth=AUTH).text
+    assert "только владельца" in page and "Доверенных бесед нет" in page
+
+
+def test_person_is_added_by_nick_and_stored_by_id(client, settings):
+    r = client.post("/access/users", data={"ref": "https://vk.com/masha"}, auth=AUTH)
+    assert r.status_code == 303 and r.headers["location"] == "/access"
+    assert stored(settings)["agent_users"] == [77]
+
+
+def test_unknown_nick_is_a_form_error_with_the_input_kept(client, settings):
+    r = client.post("/access/users", data={"ref": "@nobody"}, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and "<html" not in r.text
+    assert 'class="error"' in r.text and 'value="@nobody"' in r.text
+    assert client.post("/access/users", data={"ref": "@nobody"}, auth=AUTH).status_code == 400
+
+
+def test_person_is_removed_by_id_or_by_the_nick_from_the_file(client, settings):
+    write(settings, {"agent_users": [5, "@sasha", 9]})
+    client.post("/access/users/remove", data={"ref": "5"}, auth=AUTH)
+    client.post("/access/users/remove", data={"ref": "@sasha"}, auth=AUTH)
+    assert stored(settings)["agent_users"] == [9]
+
+
+def test_chat_is_trusted_by_peer_id_or_number_and_untrusted_again(client, settings):
+    r = client.post("/access/peers", data={"ref": "1"}, auth=AUTH, headers=HX)
+    assert r.status_code == 200 and 'id="trust"' in r.text and "toast" in r.headers["HX-Trigger"]
+    client.post("/access/peers", data={"ref": str(LEFT_CHAT)}, auth=AUTH)
+    assert stored(settings)["agent_peers"] == [CHAT, LEFT_CHAT]
+    client.post(f"/access/peers/{CHAT}/remove", auth=AUTH)
+    assert stored(settings)["agent_peers"] == [LEFT_CHAT]
+
+
+def test_private_dialog_cannot_be_trusted(client, settings):
+    r = client.post("/access/peers", data={"ref": "свои"}, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and 'value="свои"' in r.text
+    assert client.post("/access/peers/22/note", data={"text": "x"}, auth=AUTH).status_code == 400
+    assert client.post("/access/peers/22/remove", auth=AUTH).status_code == 303
+
+
+def test_multiline_note_survives_a_save_and_empty_text_removes_it(client, settings):
+    write(settings, {"agent_peers": [CHAT]})
+    client.post(f"/access/peers/{CHAT}/note", data={"text": "первая\r\nвторая: с двоеточием\r\n"}, auth=AUTH)
+    assert stored(settings)["peer_prompts"] == {str(CHAT): "первая\nвторая: с двоеточием"}
+    client.post(f"/access/peers/{CHAT}/note", data={"text": "  "}, auth=AUTH)
+    assert stored(settings)["peer_prompts"] == {}
+
+
+def test_saving_keeps_every_key_the_page_does_not_show(client, settings):
+    write(settings, {"blocked_users": ["5"], "user_prompts": {"@bob": "б"}, "agent_users": [7]})
+    client.post("/access/peers", data={"ref": str(CHAT)}, auth=AUTH)
+    assert stored(settings) == {"blocked_users": ["5"], "user_prompts": {"@bob": "б"}, "agent_users": [7],
+                                "agent_peers": [CHAT], "peer_prompts": {}}
+
+
+@pytest.mark.parametrize("content", ['{"peer_prompts": ["заметка"]}', '{"agent_peers": "2000000001"}'])
+def test_file_of_a_foreign_shape_is_shown_as_an_error_and_never_overwritten(client, settings, content):
+    write(settings, content)
+    page = client.get("/access", auth=AUTH)
+    assert page.status_code == 200 and 'class="error"' in page.text
+    r = client.post("/access/peers", data={"ref": str(CHAT)}, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and 'class="error"' in r.text
+    with open(settings.access_file, encoding="utf-8") as f:
+        assert f.read() == content
+
+
+def test_page_opens_when_vk_is_down(settings):
+    class DownVk(TrustVk):
+        def call(self, method, params):
+            raise RuntimeError("нет связи")
+
+    write(settings, {"agent_users": [5], "agent_peers": [CHAT]})
+    client = TestClient(create_app(settings, vk_factory=DownVk, ai_factory=FakeAi), follow_redirects=False)
+    page = client.get("/access", auth=AUTH)
+    assert page.status_code == 200 and "id5" in page.text and "VK не ответил" in page.text
