@@ -351,3 +351,17 @@ def test_empty_lists_do_not_touch_vk():
         raise AssertionError("VK не нужен")
 
     assert trust.trust_view(TrustLists(), never) == trust.TrustView((), (), "")
+
+
+def test_candidate_chat_is_offered_first_with_its_title_and_is_not_trusted():
+    view = trust.trust_view(TrustLists((), (OTHER_CHAT,), {}), lambda: NamesVk(), candidate=CHAT)
+    assert [(p.peer_id, p.title, p.trusted, p.candidate) for p in view.peers] == [
+        (CHAT, "лампочки", False, True), (OTHER_CHAT, "старая", True, False)]
+    unknown = trust.trust_view(TrustLists(), lambda: NamesVk(), candidate=CHAT + 6)
+    assert [(p.peer_id, p.title, p.left, p.candidate) for p in unknown.peers] == [(CHAT + 6, "", True, True)]
+
+
+@pytest.mark.parametrize("candidate", [None, 22, -5, 0, 2000000000, OTHER_CHAT])
+def test_what_is_not_an_untrusted_chat_is_not_offered(candidate):
+    view = trust.trust_view(TrustLists((), (OTHER_CHAT,), {}), lambda: NamesVk(), candidate=candidate)
+    assert [(p.peer_id, p.candidate) for p in view.peers] == [(OTHER_CHAT, False)]

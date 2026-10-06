@@ -205,6 +205,7 @@ class PeerRow:
     trusted: bool
     left: bool
     note: str
+    candidate: bool = False
 
 
 @dataclass(frozen=True)
@@ -235,10 +236,11 @@ def chat_states(vk, peer_ids) -> dict[int, tuple[str, bool]]:
     return states
 
 
-def trust_view(lists: TrustLists, vk_factory) -> TrustView:
+def trust_view(lists: TrustLists, vk_factory, candidate: int | None = None) -> TrustView:
     user_ids = [entry for entry in lists.users if isinstance(entry, int)]
     nicks = [entry.lstrip("@") for entry in lists.users if isinstance(entry, str)]
-    peer_ids = list(dict.fromkeys((*lists.peers, *lists.notes)))
+    offered = [candidate] if candidate is not None and is_chat(candidate) and candidate not in lists.peers else []
+    peer_ids = list(dict.fromkeys((*offered, *lists.peers, *lists.notes)))
     by_id, by_nick, states, error, asked, nicks_asked = {}, {}, {}, "", False, False
     if lists.users or peer_ids:
         try:
@@ -267,5 +269,5 @@ def trust_view(lists: TrustLists, vk_factory) -> TrustView:
     for peer in peer_ids:
         # беседы нет в ответе VK — аккаунт в ней не состоит; без ответа VK судить об этом нельзя
         title, left = states.get(peer, ("", asked))
-        peers.append(PeerRow(peer, title, peer in lists.peers, left, lists.notes.get(peer, "")))
+        peers.append(PeerRow(peer, title, peer in lists.peers, left, lists.notes.get(peer, ""), peer in offered))
     return TrustView(tuple(users), tuple(peers), error)

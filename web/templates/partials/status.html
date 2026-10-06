@@ -31,6 +31,7 @@
       <span class="trust-name"><span data-ts="{{ r.ts }}" x-data x-text="localTime($el.dataset.ts)"></span>
         · <a href="{{ r.peer_id|peer_link }}">{{ r.peer_id|peer_label }}</a>{% if r.from_id > 0 %} · <a href="https://vk.com/id{{ r.from_id }}">id{{ r.from_id }}</a>{% endif %}
         · {{ r.reason }}{% if r.count > 1 %} <span class="muted">×{{ r.count }}</span>{% endif %}</span>
+      {% if r.trustable %}<a href="/access?trust={{ r.peer_id }}">Доверять беседе…</a>{% endif %}
     </div>{% endfor %}
   </section>{% endif %}
   <form method="post" action="/settings/pause" hx-post="/settings/pause" hx-target="#status" hx-swap="outerHTML">

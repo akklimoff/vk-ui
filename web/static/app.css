@@ -163,3 +163,5 @@ article > header > small { display: block; font-weight: normal; }
 .status-block { margin: var(--pico-spacing) 0; padding-top: 0.6rem; border-top: 1px solid var(--pico-muted-border-color); }
 .status-row { padding: 0.35rem 0; justify-content: space-between; }
 .status-row form { margin: 0; }
+
+.trust-ask { padding: 0.6rem; border: 1px solid var(--pico-primary); border-radius: var(--pico-border-radius); }

@@ -1,7 +1,7 @@
 import os
 import time
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -181,12 +181,12 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         return render.saved(request, "status", status_ctx(),
                             toast="Агент на паузе" if paused else "Агент снова слушает", redirect="/")
 
-    def trust_ctx(form: dict | None = None):
+    def trust_ctx(form: dict | None = None, candidate: int | None = None):
         try:
             lists = trust.load(settings.access_file)
         except ValueError as e:
             return {"t": None, "broken": str(e), "form": form or {}, "page": "access"}
-        return {"t": trust.trust_view(lists, vk), "broken": "", "form": form or {}, "page": "access"}
+        return {"t": trust.trust_view(lists, vk, candidate), "broken": "", "form": form or {}, "page": "access"}
 
     def trust_change(request: Request, change, toast: str, form: dict | None = None):
         try:
@@ -196,8 +196,10 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         return render.saved(request, "access", trust_ctx(), toast=toast, redirect="/access")
 
     @app.get("/access")
-    def access_page(request: Request):
-        return render.page(request, "access", trust_ctx())
+    def access_page(request: Request, asked: str = Query("", alias="trust")):
+        # int() читает и «²», и полноширинные цифры; номер беседы — только десятичные цифры ASCII
+        candidate = int(asked) if asked.isascii() and asked.isdigit() else None
+        return render.page(request, "access", trust_ctx(candidate=candidate))
 
     @app.post("/access/users")
     def trust_person(request: Request, ref: str = Form("")):

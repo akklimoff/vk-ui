@@ -22,7 +22,8 @@
   <article>
     <header><b>Доверенные беседы</b>
       <small class="muted">Только в них агент откликается на тег. В личных диалогах он не работает; «Избранное» владельца слышит всегда.</small></header>
-    {% for p in t.peers %}<section class="trust-chat">
+    {% for p in t.peers %}<section class="trust-chat{{ ' trust-ask' if p.candidate }}">
+      {% if p.candidate %}<p><b>Агента отметили в этой беседе, но она не в доверенных.</b> Сверьте название и номер: после «Доверять» доверенные люди смогут просить агента и здесь.</p>{% endif %}
       <div class="row trust-row">
         <span class="trust-name"><a href="{{ p.peer_id|peer_link }}">{{ p.title or p.peer_id|peer_label }}</a> <span class="muted">{{ p.peer_id }}</span>
           {% if not p.trusted %}<span class="badge">не доверенная</span>{% endif %}

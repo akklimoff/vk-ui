@@ -160,3 +160,29 @@ def test_page_opens_when_vk_is_down(settings):
     client = TestClient(create_app(settings, vk_factory=DownVk, ai_factory=FakeAi), follow_redirects=False)
     page = client.get("/access", auth=AUTH)
     assert page.status_code == 200 and "id5" in page.text and "VK не ответил" in page.text
+
+
+ASKED_HERE = "Агента отметили в этой беседе"
+
+
+def test_chat_from_the_status_page_is_shown_with_its_title_and_trusted_only_by_the_form(client, settings):
+    page = client.get(f"/access?trust={CHAT}", auth=AUTH)
+    assert page.status_code == 200 and ASKED_HERE in page.text and "лампочки" in page.text
+    with pytest.raises(FileNotFoundError):
+        stored(settings)
+    client.post("/access/peers", data={"ref": str(CHAT)}, auth=AUTH)
+    assert stored(settings)["agent_peers"] == [CHAT]
+    assert ASKED_HERE not in client.get(f"/access?trust={CHAT}", auth=AUTH).text
+
+
+def test_candidate_the_account_has_left_is_flagged(client):
+    page = client.get(f"/access?trust={LEFT_CHAT}", auth=AUTH).text
+    assert ASKED_HERE in page and "старая беседа" in page and page.count("аккаунт не в беседе") == 1
+
+
+@pytest.mark.parametrize("forged", ["22", "-5", "0", "2000000000", "свои", "²", "2000000001 or 1", ""])
+def test_forged_trust_address_offers_nothing_and_writes_nothing(client, settings, forged):
+    page = client.get("/access", params={"trust": forged}, auth=AUTH)
+    assert page.status_code == 200 and ASKED_HERE not in page.text
+    with pytest.raises(FileNotFoundError):
+        stored(settings)
