@@ -1,9 +1,0 @@
-{% extends "base.html" %}{% block body %}
-{% if peers|length > 1 %}<div class="chips" role="navigation" aria-label="Чаты">
-  <a class="chip" href="/replies" {% if not peer %}aria-current="page"{% endif %}>Все</a>
-  {% for p in peers %}<a class="chip" href="/replies?peer={{ p }}" {% if p == peer %}aria-current="page"{% endif %}>{{ p|peer_label }}</a>{% endfor %}
-</div>{% endif %}
-{% include "partials/replies_poll.html" %}
-<p id="feed-empty" class="muted" {% if records %}hidden{% endif %}>Ответов ещё нет.</p>
-<div id="feed">{% set embedded = true %}{% include "partials/replies.html" %}</div>
-{% endblock %}

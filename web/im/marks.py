@@ -1,12 +1,12 @@
-from bot.status import ReplyRecord
+from bot.agent.journal import ActionRecord
 from web.im.views import BotMark
 from web.services import model_label
 
 
-def bot_marks(records: list[ReplyRecord]) -> dict[int, BotMark]:
+def bot_marks(records: list[ActionRecord]) -> dict[int, BotMark]:
     marks = {}
-    for r in records:
-        mark = BotMark(r.persona or "по умолчанию", model_label(r.model) if r.model else "")
-        for mid in tuple(r.reply_message_ids) or (r.reply_message_id,):
-            marks[int(mid)] = mark
+    for record in records:
+        mark = BotMark(record.persona or "по умолчанию", model_label(record.model) if record.model else "")
+        for message_id in record.reply_message_ids:
+            marks[int(message_id)] = mark
     return marks

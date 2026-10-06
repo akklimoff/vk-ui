@@ -1,0 +1,30 @@
+{% if not embedded %}{% with oob = true %}{% include "partials/journal_poll.html" %}{% endwith %}
+{% if entries %}<p id="feed-empty" class="muted" hx-swap-oob="true" hidden>Просьб ещё не было.</p>{% endif %}{% endif %}
+{% for e in entries %}{% set r = e.record %}<article x-data="{ ask: false }">
+  <header class="muted">
+    <span>{{ (now - r.ts)|ago }}</span> · <span data-ts="{{ r.ts }}" x-text="localTime($el.dataset.ts)"></span>
+    · <a href="{{ r.peer_id|peer_link }}">{{ r.peer_id|peer_label if r.place == "chat" else e.where }}</a>
+    · {{ e.who }} <a href="https://vk.com/id{{ r.from_id }}">id{{ r.from_id }}</a>
+    <span class="badge {{ e.outcome_kind }}">{{ e.outcome }}</span>
+  </header>
+  <p class="reply-text"><span class="muted">просьба:</span> {{ r.request }}</p>
+  {% if e.calls %}<details>
+    <summary>{{ e.calls|length|plural("вызов", "вызова", "вызовов") }}</summary>
+    <ul class="calls">{% for c in e.calls %}<li>
+      <code>{{ c.method }}</code> <span class="badge {{ 'bad' if c.bad }}">{{ c.verdict }}</span>{% if c.status %} <span class="{{ 'bad' if c.bad else 'ok' }}">{{ c.status }}</span>{% endif %}
+      {% if c.reason %}<div class="muted">{{ c.reason }}</div>{% endif %}
+      {% for name, value in c.params %}<div class="call-param"><span class="muted">{{ name }}:</span> {{ value }}</div>{% endfor %}
+    </li>{% endfor %}</ul>
+  </details>{% endif %}
+  {% if r.reply %}<p class="reply-text"><span class="muted">ответ:</span> {{ r.reply }}</p>{% endif %}
+  <p class="muted journal-meta">шагов {{ r.steps }} · {{ r.duration_s }} с · {{ r.prompt_tokens }}+{{ r.completion_tokens }} ток.{% if r.model %} · {{ r.model|model_label }}{% endif %} · {{ r.persona or "персона по умолчанию" }}</p>
+  {% if r.reply_message_ids %}<footer class="row">
+    <button type="button" class="outline secondary" x-show="!ask" @click="ask = true">Удалить ответ в VK</button>
+    <span class="row" x-show="ask" x-cloak>
+      <span>Удалить ответ в VK?</span>
+      <button type="button" hx-post="/journal/replies/{{ r.reply_message_ids[0] }}/delete" hx-target="closest footer"
+              hx-swap="innerHTML" hx-disabled-elt="this">Да</button>
+      <button type="button" class="outline secondary" @click="ask = false">Нет</button>
+    </span>
+  </footer>{% endif %}
+</article>{% endfor %}

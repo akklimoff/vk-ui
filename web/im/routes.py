@@ -9,7 +9,8 @@ from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from bot.access import AccessFile
 from ai.personas import list_personas
 from bot.runtime import RuntimeFile, runtime_defaults
-from bot.status import ReplyLog, write_json_atomic
+from bot.agent.journal import ActionLog
+from bot.status import write_json_atomic
 from web.im.controls import set_keyed_text, set_member, set_paused_peer, set_peer_blocked, set_peer_personas
 from web.im.draft import draft_reply
 from web.im.marks import bot_marks
@@ -45,7 +46,7 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
         return runtime_file.current()
 
     def marks():
-        return bot_marks(ReplyLog(f"{settings.state_dir}/replies.jsonl").read())
+        return bot_marks(ActionLog(f"{settings.state_dir}/actions.jsonl").read())
 
     def dialogs_ctx():
         access, rt = lists(), runtime()

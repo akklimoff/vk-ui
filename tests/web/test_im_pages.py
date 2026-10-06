@@ -94,11 +94,12 @@ def test_chat_partial_for_htmx_pushes_url(client):
 
 
 def test_chat_marks_bot_replies(client, settings):
-    import os
-    os.makedirs(settings.state_dir, exist_ok=True)
-    with open(f"{settings.state_dir}/replies.jsonl", "w") as f:
-        f.write('{"ts": 1, "peer_id": 2000000001, "from_id": 11, "message_id": 500, "reply_message_id": 501, '
-                '"reply": "ну все тогда", "tag": null, "latency_s": 1.0, "persona": "rina", "model": "grok-4.6"}\n')
+    from bot.agent.journal import ActionLog, ActionRecord
+
+    ActionLog(f"{settings.state_dir}/actions.jsonl").append(ActionRecord(
+        ts=1, peer_id=PEER_CHAT, from_id=11, role="trusted", place="chat", message_id=500, request="просьба",
+        calls=(), outcome="replied", reply="ну все тогда", reply_message_ids=(501,), steps=1, duration_s=1.0,
+        model="grok-4.6", prompt_tokens=1, completion_tokens=1, persona="rina"))
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
     assert "бот · rina" in r.text
 

@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from bot.config import Settings
 from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
 from ai.client import AiError, ai_backend
-from bot.status import ReplyLog, write_json_atomic
+from bot.status import write_json_atomic
 from bot.vk import VkClient
 from web.auth import make_guard
 from web.humanize import clock, mmss, plural, short_since
@@ -16,7 +16,7 @@ from web.im.routes import create_router
 from web.im.views import presence, preview, wave_bars
 from ai.personas import list_personas, load_persona
 from common.redact import sanitize_reply
-from web import trust
+from web import journal, trust
 from web.render import Renderer, is_hx
 from web.services import (BrokenConfig, PromptView, access_raw, load_runtime_dict, model_groups, model_label,
                           parse_runtime_form, peer_label, peer_link, prompt_view, read_config_for_update,
@@ -225,24 +225,29 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
     def chat_note(request: Request, peer_id: int, text: str = Form("")):
         return trust_change(request, lambda lists: trust.set_note(lists, peer_id, text), "Заметка сохранена")
 
-    @app.get("/replies")
-    def replies_page(request: Request, peer: int | None = None, after: float = 0.0):
-        all_records = ReplyLog(f"{settings.state_dir}/replies.jsonl").read()
-        records = [r for r in all_records if r.ts > after and (peer is None or r.peer_id == peer)]
-        newest = max((r.ts for r in records), default=after)
-        return render.page(request, "replies", {
-            "records": records, "newest": newest, "now": time.time(), "peer": peer,
-            "peers": sorted({r.peer_id for r in all_records}), "page": "replies"})
+    @app.get("/journal")
+    def journal_page(request: Request, peer: int | None = None, after: float = 0.0):
+        everything = journal.read_entries(settings.state_dir)
+        entries = [e for e in everything if e.record.ts > after and (peer is None or e.record.peer_id == peer)]
+        newest = max((e.record.ts for e in entries), default=after)
+        return render.page(request, "journal", {
+            "entries": entries, "newest": newest, "now": time.time(), "peer": peer,
+            "peers": sorted({e.record.peer_id for e in everything}), "page": "journal"})
 
-    @app.post("/replies/{reply_message_id}/delete")
-    def delete_reply(request: Request, reply_message_id: int):
+    @app.post("/journal/replies/{message_id}/delete")
+    def delete_reply(request: Request, message_id: int):
+        # удаляется только то, что журнал знает как ответ агента: иначе адрес удалял бы любое сообщение аккаунта
+        ids = journal.reply_ids(settings.state_dir, message_id)
+        if not ids:
+            raise HTTPException(404, "В журнале нет такого ответа")
         try:
-            vk().delete_message(reply_message_id)
+            for part in ids:
+                vk().delete_message(part)
         except Exception as e:
             raise HTTPException(502, f"VK не удалил сообщение: {safe_error(e)}")
         if is_hx(request):
-            return Response(status_code=200)
-        return RedirectResponse("/replies", status_code=303)
+            return Response('<span class="muted">Ответ удалён в VK</span>', media_type="text/html")
+        return RedirectResponse("/journal", status_code=303)
 
     def sandbox_ctx(**extra):
         runtime = load_runtime_dict(settings.runtime_file)

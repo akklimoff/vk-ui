@@ -154,3 +154,8 @@ details > summary { padding: 0.5rem 0; }
 .trust-chat { padding: 0.5rem 0; border-top: 1px solid var(--pico-muted-border-color); }
 .trust-chat:first-of-type { border-top: 0; }
 article > header > small { display: block; font-weight: normal; }
+
+.calls { list-style: none; padding-left: 0; margin: 0.25rem 0 0.5rem; }
+.calls li { list-style: none; padding: 0.45rem 0; border-top: 1px solid var(--pico-muted-border-color); }
+.call-param { overflow-wrap: anywhere; font-size: 0.9em; }
+.journal-meta { font-size: 0.85em; margin: 0.25rem 0; }

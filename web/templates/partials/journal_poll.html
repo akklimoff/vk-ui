@@ -1,0 +1,3 @@
+<div id="journal-poll" {% if oob %}hx-swap-oob="true"{% endif %}
+     hx-get="/journal?after={{ newest }}{% if peer %}&peer={{ peer }}{% endif %}"
+     hx-trigger="every 10s [document.visibilityState === 'visible']" hx-target="#feed" hx-swap="afterbegin"></div>
