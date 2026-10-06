@@ -15,12 +15,12 @@ from web.im.routes import create_router
 from web.im.views import presence, preview, wave_bars
 from ai.personas import list_personas, load_persona
 from common.redact import sanitize_reply
-from web import journal, state, trust
+from web import dryrun, journal, state, trust
 from web.render import Renderer, is_hx
 from web.prompts import PromptView, prompt_peers, prompt_view
 from web.services import (BrokenConfig, ceilings, load_runtime_dict, model_groups, model_label,
                           parse_runtime_form, peer_label, peer_link,
-                          runtime_form_values, sandbox_reply, save_persona, save_runtime_patch, update_config)
+                          runtime_form_values, save_persona, save_runtime_patch, update_config)
 
 HERE = os.path.dirname(__file__)
 
@@ -264,7 +264,9 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         return {"personas": list_personas(settings.personas_dir),
                 "active": runtime.get("active_persona", ""),
                 "active_model": runtime.get("active_model", ""),
-                "page": "sandbox", "result": None, "context": "", "form": None,
+                "temperature": runtime.get("temperature", settings.llm_temperature),
+                "peers": trusted_now().peers,
+                "page": "sandbox", "result": None, "form": {},
                 **models_ctx(), **extra}
 
     @app.get("/sandbox")
@@ -272,26 +274,26 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         return render.page(request, "sandbox", sandbox_ctx())
 
     @app.post("/sandbox")
-    def sandbox_run(request: Request, persona: str = Form(""), conversation: str = Form(""),
-                    peer_id: str = Form(""), count: str = Form("40"), asker: str = Form("Собеседник"),
-                    temperature: str = Form("0.8"), model: str = Form("")):
-        form = {"conversation": conversation, "peer_id": peer_id, "count": count,
-                "asker": asker, "temperature": temperature}
+    def sandbox_run(request: Request, text: str = Form(""), peer: str = Form(dryrun.SAVED_PEER),
+                    role: str = Form("owner"), persona: str = Form(""), temperature: str = Form(""),
+                    model: str = Form("")):
+        shown = {"form": {"text": text, "peer": peer.strip(), "role": role, "temperature": temperature},
+                 "active": persona, "active_model": model}
+        if not text.strip():
+            return render.invalid(request, "sandbox", sandbox_ctx(**shown), "Напишите просьбу")
         try:
-            pid = int(peer_id) if peer_id.strip() else None
-            temp = float(temperature)
-            n = int(count)
+            temp = float(temperature) if temperature.strip() else None
         except ValueError:
-            return render.invalid(request, "sandbox", sandbox_ctx(), "peer_id, count и temperature должны быть числами")
+            return render.invalid(request, "sandbox", sandbox_ctx(**shown), "Температура должна быть числом")
         try:
-            context, reply = sandbox_reply(settings, ai(), vk() if pid is not None else None,
-                                           persona_slug=persona, conversation=conversation, peer_id=pid,
-                                           count=n, asker=asker, temperature=temp, model=model)
+            result = dryrun.dry_run(settings, ai(), vk(), text=text, peer=peer, role=role, persona=persona,
+                                    model=model, temperature=temp, safe_error=safe_error)
+        except ValueError as e:
+            return render.invalid(request, "sandbox", sandbox_ctx(**shown), str(e))
         except Exception as e:
-            return render.invalid(request, "sandbox", sandbox_ctx(active_model=model),
-                                  f"Не удалось получить ответ: {safe_error(e)}")
-        return render.page(request, "sandbox", sandbox_ctx(result=reply, context=context, active=persona,
-                                                           active_model=model, form=form))
+            return render.invalid(request, "sandbox", sandbox_ctx(**shown),
+                                  f"Пробный прогон не удался: {safe_error(e)}")
+        return render.page(request, "sandbox", sandbox_ctx(result=result, **shown))
 
     return app
 

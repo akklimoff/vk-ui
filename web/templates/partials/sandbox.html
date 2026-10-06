@@ -1,11 +1,19 @@
 <div id="sandbox-result">
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
   {% if result is not none %}<article>
-    <header><b>Ответ</b></header>
-    <p class="reply-text">{{ result }}</p>
+    <header><b>Что сделал бы агент</b> <span class="badge {{ result.outcome_kind }}">{{ result.outcome }}</span></header>
+    {% if result.ai_error %}<div class="error">{{ result.ai_error }}</div>{% endif %}
+    <p class="reply-text"><span class="muted">ответ:</span> {{ result.reply or "—" }}</p>
+    {% if result.calls %}<ul class="calls">{% for c in result.calls %}<li>
+      <code>{{ c.method }}</code> <span class="badge {{ 'bad' if c.bad }}">{{ c.verdict }}</span>{% if c.status %} <span class="{{ 'bad' if c.bad else 'ok' }}">{{ c.status }}</span>{% endif %}
+      {% if c.reason %}<div class="muted">{{ c.reason }}</div>{% endif %}
+      {% for name, value in c.params %}<div class="call-param"><span class="muted">{{ name }}:</span> {{ value }}</div>{% endfor %}
+    </li>{% endfor %}</ul>{% else %}<p class="muted">Вызовов не было.</p>{% endif %}
+    <p class="muted journal-meta">шагов {{ result.steps }} · {{ result.prompt_tokens }}+{{ result.completion_tokens }} ток.{% if result.model %} · {{ result.model|model_label }}{% endif %}</p>
+    <p class="muted">Результаты вызовов здесь не показываются: в них чужая переписка.</p>
     <details>
-      <summary>Контекст, ушедший в модель <span class="muted">{{ context|length }} симв.</span></summary>
-      <pre>{{ context }}</pre>
+      <summary>Первое сообщение, которое получила модель</summary>
+      <pre>{{ result.first_turn }}</pre>
     </details>
   </article>{% endif %}
 </div>

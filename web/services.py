@@ -1,17 +1,12 @@
 import json
 import os
 import threading
-from dataclasses import dataclass
 from typing import Callable
 
 from ai.catalog import find_model
 from ai.personas import persona_path, render_persona
-from ai.contract import ReplyRequest
-from bot.access import AccessFile, scoped_prompts
 from bot.agent.loop import Limits
 from bot.config import parse_ids
-from bot.context import to_lines
-from bot.reply import deliverable
 from bot.status import read_json, write_json_atomic
 
 def _object_or_empty(path: str) -> dict:
@@ -139,22 +134,3 @@ def peer_label(peer_id: int) -> str:
 def peer_link(peer_id: int) -> str:
     sel = f"c{peer_id - GROUP_CHAT_PEER_BASE}" if peer_id >= GROUP_CHAT_PEER_BASE else str(peer_id)
     return f"https://vk.com/im?sel={sel}"
-
-
-def sandbox_reply(settings, ai, vk, *, persona_slug: str, conversation: str, peer_id: int | None,
-                  count: int, asker: str, temperature: float, model: str = "") -> tuple[str, str]:
-    request = ReplyRequest((), asker, persona=persona_slug, temperature=temperature, model=model,
-                           transcript=conversation)
-    if peer_id is not None:
-        is_private = peer_id < GROUP_CHAT_PEER_BASE
-        lists = AccessFile(settings.access_file, vk.resolve_screen_names).current()
-        general_prompt, specific_prompt = scoped_prompts(lists, peer_id, is_private)
-        request = ReplyRequest(
-            to_lines(vk.history(peer_id, count), vk.resolve_name, vk.me_id), asker, is_private=is_private,
-            auto_chat=peer_id in lists.auto_reply_peers or peer_id in lists.onboarding_peers,
-            persona=persona_slug, scope_prompt=general_prompt, user_prompt=specific_prompt,
-            temperature=temperature, model=model,
-        )
-    result = ai.reply(request)
-    parts = deliverable(result.parts, [settings.vk_token], vk.me_id if vk is not None else None)
-    return result.conversation, "\n".join(parts)
