@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from ai.catalog import find_model
 from ai.personas import load_persona, persona_path, render_persona
 from ai.contract import ReplyRequest
-from bot.access import AccessFile, join_lines, parse_access, scoped_prompts
+from bot.access import AccessFile, join_lines, legacy_lists, parse_access, scoped_prompts
 from bot.config import parse_ids
 from bot.context import to_lines
 from bot.reply import deliverable
@@ -228,6 +228,8 @@ def parse_access_form(form: dict, stored: dict | None = None) -> dict:
                                   for k, v in _keyed_prompts("peer_blocked_users",
                                                              form.get("peer_blocked_users", "")).items()}
     try:
+        # разбор бота прощает ошибки в старых ключах, а форма должна их назвать
+        legacy_lists(data, lambda names: frozenset())
         parse_access(data, resolve_screen_names=lambda names: frozenset())
     except Exception as e:
         raise ValueError(f"Некорректные значения: {e}") from e
