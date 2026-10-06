@@ -9,6 +9,10 @@ from web.services import read_config_for_update, update_config
 GROUP_CHAT_PEER_BASE = 2_000_000_000
 VK_URL = re.compile(r"^(?:https?://)?(?:m\.)?vk\.(?:com|ru)/", re.IGNORECASE)
 NICK = re.compile(r"[a-z0-9_.]+")
+# str.isdigit пропускает «²» и «٣», а int() на них и на числе длиннее 4300 цифр бросает ValueError
+WHOLE_NUMBER = re.compile(r"[0-9]{1,18}")
+# так VK отвечает на users.get с единственным ником, которого нет
+NO_SUCH_USER_CODE = 113
 VK_SILENT = "VK не ответил: имена и названия не показаны"
 NICKS_SILENT = "VK не ответил про ники: на кого они указывают, не показано"
 
@@ -44,7 +48,8 @@ def user_entry(item) -> int | str:
 
 def peer_entry(item, key: str) -> int:
     text = str(item).strip()
-    if isinstance(item, bool) or not isinstance(item, (int, str)) or not text.isdigit() or not is_chat(int(text)):
+    if (isinstance(item, bool) or not isinstance(item, (int, str)) or not WHOLE_NUMBER.fullmatch(text)
+            or not is_chat(int(text))):
         raise TrustError(f"{key}: «{item}» — не номер беседы")
     return int(text)
 
@@ -101,12 +106,19 @@ def untrust_user(lists: TrustLists, ref: str) -> TrustLists:
     return replace(lists, users=tuple(entry for entry in lists.users if str(entry) != key))
 
 
-def nick_owner(entry: str, resolve) -> int | None:
+def nick_ids(name: str, resolve, advice: str) -> frozenset[int]:
+    """Ника нет — пустой ответ, а не сбой: иначе одна мёртвая строка в файле не давала бы снять доверие ни с кого."""
     try:
-        found = resolve(frozenset({entry.lstrip("@")}))
-    except Exception:
+        return resolve(frozenset({name}))
+    except Exception as error:
+        if getattr(error, "code", None) == NO_SUCH_USER_CODE:
+            return frozenset()
         # текст ошибки VK может содержать адрес запроса с токеном, поэтому в ответ он не идёт
-        raise TrustError(f"Не удалось проверить ник «{entry}» в VK, попробуйте ещё раз") from None
+        raise TrustError(f"Не удалось проверить ник «{name}» в VK, {advice}") from None
+
+
+def nick_owner(entry: str, resolve) -> int | None:
+    found = nick_ids(entry.lstrip("@"), resolve, "попробуйте ещё раз")
     return next(iter(found)) if len(found) == 1 else None
 
 
@@ -161,11 +173,7 @@ def user_ref(raw: str, resolve) -> int:
         user_id = next(iter(ids))
     else:
         name = next(iter(names))
-        try:
-            found = resolve(names)
-        except Exception:
-            # текст ошибки VK может содержать адрес запроса с токеном, поэтому в ответ он не идёт
-            raise TrustError(f"Не удалось проверить ник «{name}» в VK, попробуйте ещё раз или укажите id") from None
+        found = nick_ids(name, resolve, "попробуйте ещё раз или укажите id")
         if len(found) != 1:
             raise TrustError(f"Человек с ником «{name}» не найден")
         user_id = next(iter(found))
@@ -176,7 +184,7 @@ def user_ref(raw: str, resolve) -> int:
 
 def peer_ref(raw: str) -> int:
     text = raw.strip().lower().removeprefix("c")
-    if not text.isdigit() or int(text) in (0, GROUP_CHAT_PEER_BASE):
+    if not WHOLE_NUMBER.fullmatch(text) or int(text) in (0, GROUP_CHAT_PEER_BASE):
         raise TrustError("Нужна беседа: её peer_id (2000000007) или номер (7)")
     number = int(text)
     return number if number > GROUP_CHAT_PEER_BASE else number + GROUP_CHAT_PEER_BASE

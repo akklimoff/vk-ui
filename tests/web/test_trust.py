@@ -41,6 +41,9 @@ def test_lists_are_read_from_the_three_agent_keys():
     ({"agent_peers": {"2000000001": 1}}, "agent_peers"),
     ({"agent_peers": ["свои"]}, "agent_peers"),
     ({"agent_peers": [22]}, "agent_peers"),
+    ({"agent_peers": ["²"]}, "agent_peers"),
+    pytest.param({"agent_peers": ["9" * 5000]}, "agent_peers", id="too-long-for-int"),
+    ({"peer_prompts": {"²": "заметка"}}, "peer_prompts"),
     ({"peer_prompts": ["заметка"]}, "peer_prompts"),
     ({"peer_prompts": "заметка"}, "peer_prompts"),
     ({"peer_prompts": {"свои": "заметка"}}, "peer_prompts"),
@@ -101,7 +104,8 @@ def test_peer_ref_takes_peer_ids_and_chat_numbers(raw, expected):
     assert trust.peer_ref(raw) == expected
 
 
-@pytest.mark.parametrize("raw", ["", "свои", "-1", "0", "2000000000", "1.5"])
+@pytest.mark.parametrize("raw", ["", "свои", "-1", "0", "2000000000", "1.5", "²", "c²", "٣",
+                                 pytest.param("9" * 5000, id="too-long-for-int")])
 def test_peer_ref_refuses_everything_else(raw):
     with pytest.raises(TrustError):
         trust.peer_ref(raw)
@@ -244,6 +248,44 @@ def test_untrusting_fails_loudly_when_a_nick_cannot_be_checked():
         trust.untrust_ref(TrustLists((11, "@vasya")), "@vasya", down)
     assert trust.untrust_user_id(TrustLists((11, 5)), 11, down).users == (5,)
     assert trust.untrust_ref(TrustLists((11, 5)), "11", down).users == (5,)
+
+
+class NoSuchUser(Exception):
+    code = 113
+
+
+def only_vasya_exists(names):
+    if names == frozenset({"vasya"}):
+        return frozenset({11})
+    raise NoSuchUser("Invalid user id, vk1.secret в тексте ошибки")
+
+
+def test_dead_nick_does_not_block_revoking_trust():
+    lists = TrustLists((11, "@ghost", "@vasya", 5))
+    assert trust.untrust_user_id(lists, 5, only_vasya_exists).users == (11, "@ghost", "@vasya")
+    assert trust.untrust_user_id(lists, 11, only_vasya_exists).users == ("@ghost", 5)
+    assert trust.untrust_ref(lists, "5", only_vasya_exists).users == (11, "@ghost", "@vasya")
+    assert trust.untrust_ref(lists, "@vasya", only_vasya_exists).users == ("@ghost", 5)
+    assert trust.untrust_ref(lists, "@ghost", only_vasya_exists).users == (11, "@vasya", 5)
+
+
+def test_user_ref_calls_an_unknown_nick_not_found():
+    with pytest.raises(TrustError, match="не найден") as error:
+        trust.user_ref("@ghost", only_vasya_exists)
+    assert "vk1.secret" not in str(error.value)
+
+
+def test_other_vk_errors_still_stop_the_revocation():
+    class Flood(Exception):
+        code = 6
+
+    def flooded(names):
+        raise Flood("Too many requests")
+
+    with pytest.raises(TrustError):
+        trust.untrust_user_id(TrustLists((11, "@vasya")), 11, flooded)
+    with pytest.raises(TrustError, match="Не удалось проверить"):
+        trust.user_ref("@vasya", flooded)
 
 
 PEOPLE = {"5": {"id": 5, "first_name": "Маша", "last_name": "Иванова", "screen_name": "masha_i"},
