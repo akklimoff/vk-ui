@@ -64,9 +64,10 @@ def test_plain_save_over_broken_file_is_400_and_leaves_it_untouched(client, sett
     assert read_bytes(getattr(settings, which)) == before
 
 
+@pytest.mark.parametrize("content", [TRAILING_COMMA, NOT_AN_OBJECT])
 @pytest.mark.parametrize("which,url,form", WRITES)
-def test_htmx_save_over_broken_file_is_422_and_leaves_it_untouched(client, settings, which, url, form):
-    before = spoil(getattr(settings, which), TRAILING_COMMA)
+def test_htmx_save_over_broken_file_is_422_and_leaves_it_untouched(client, settings, which, url, form, content):
+    before = spoil(getattr(settings, which), content)
     r = client.post(url, data=form, auth=AUTH, headers=HX)
     assert r.status_code == 422 and "<html" not in r.text
     assert file_name(settings, which) in json.loads(r.headers["HX-Trigger"])["toast"]["text"]
@@ -101,3 +102,17 @@ def test_unusable_file_is_refused_by_name(tmp_path, content):
     path.write_text(content, encoding="utf-8")
     with pytest.raises(BrokenConfig, match="access.json"):
         read_config_for_update(str(path))
+
+
+class VkWithoutMembers(FakeVk):
+    def members(self, peer_id):
+        raise RuntimeError("VK недоступен")
+
+
+def test_refusal_names_the_file_even_when_the_panel_cannot_be_rebuilt(settings):
+    client = TestClient(create_app(settings, vk_factory=VkWithoutMembers, ai_factory=DraftAi), follow_redirects=False)
+    before = spoil(settings.access_file, TRAILING_COMMA)
+    r = client.post(f"/im/{PEER_CHAT}/bot/prompt", data={"text": "новая заметка"}, auth=AUTH, headers=HX)
+    assert r.status_code == 422
+    assert "access.json" in json.loads(r.headers["HX-Trigger"])["toast"]["text"]
+    assert read_bytes(settings.access_file) == before

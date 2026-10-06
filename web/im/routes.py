@@ -180,7 +180,10 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
     def not_saved(request: Request, peer_id: int, error: BrokenConfig, **entered):
         if not is_hx(request):
             return render.invalid(request, "im_bot", {}, str(error))
-        ctx = guard(lambda: bot_ctx(peer_id))
+        try:
+            ctx = bot_ctx(peer_id)
+        except Exception:
+            return render.invalid(request, "im_error", {"page": "im"}, str(error))
         return render.invalid(request, "im_bot", {**ctx, "c": replace(ctx["c"], **entered)}, str(error))
 
     @router.post("/im/{peer_id}/bot/prompt")
