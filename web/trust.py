@@ -2,17 +2,12 @@ import re
 from dataclasses import dataclass, field, replace
 from typing import Callable
 
-from bot.access import join_lines
+from bot.access import NICK, NO_SUCH_USER_CODE, WHOLE_NUMBER, join_lines
 from bot.config import parse_user_refs
 from web.services import read_config_for_update, update_config
 
 GROUP_CHAT_PEER_BASE = 2_000_000_000
 VK_URL = re.compile(r"^(?:https?://)?(?:m\.)?vk\.(?:com|ru)/", re.IGNORECASE)
-NICK = re.compile(r"[a-z0-9_.]+")
-# str.isdigit пропускает «²» и «٣», а int() на них и на числе длиннее 4300 цифр бросает ValueError
-WHOLE_NUMBER = re.compile(r"[0-9]{1,18}")
-# так VK отвечает на users.get с единственным ником, которого нет
-NO_SUCH_USER_CODE = 113
 VK_SILENT = "VK не ответил: имена и названия не показаны"
 NICKS_SILENT = "VK не ответил про ники: на кого они указывают, не показано"
 
