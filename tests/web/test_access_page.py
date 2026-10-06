@@ -57,6 +57,11 @@ def test_page_names_people_and_chats(client, settings):
     assert page.count("не найден") == 1
 
 
+def test_page_says_a_trusted_person_reads_the_private_correspondence(client):
+    page = client.get("/access", auth=AUTH).text
+    assert "всю личную переписку аккаунта с людьми и сообществами" in page.split("Доверенные люди")[1].split("</header>")[0]
+
+
 def test_nick_from_the_file_is_shown_with_the_person_it_points_to(client, settings):
     write(settings, {"agent_users": ["@vasya"]})
     page = client.get("/access", auth=AUTH).text

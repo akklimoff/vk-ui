@@ -100,6 +100,11 @@ def test_chat_note_survives_being_posted_back_from_the_panel(client, settings):
     assert access(settings)["peer_prompts"] == {}
 
 
+def test_members_header_says_a_trusted_person_reads_the_private_correspondence(client):
+    panel = client.get(f"/im/{PEER_CHAT}/bot", auth=AUTH, headers=HX).text
+    assert "личную переписку аккаунта" in panel.split("Участники")[1].split("</h4>")[0]
+
+
 def test_member_becomes_trusted_and_untrusted(client, settings):
     client.post(f"/im/{PEER_CHAT}/bot/members/11", data={"on": "1"}, auth=AUTH, headers=HX)
     assert access(settings)["agent_users"] == [11]

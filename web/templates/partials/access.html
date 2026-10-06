@@ -6,7 +6,7 @@
   {% if t.vk_error %}<p class="muted">{{ t.vk_error }}</p>{% endif %}
   <article>
     <header><b>Доверенные люди</b>
-      <small class="muted">Их просьбы с тегом агент выполняет в доверенных беседах с теми же правами, что у владельца в беседе, и сразу, без «да»: пишет в беседу, в личку и на стену, удаляет сообщения и посты, исключает, переименовывает, заносит в чёрный список.</small></header>
+      <small class="muted">Их просьбы с тегом агент выполняет в доверенных беседах с теми же правами, что у владельца в беседе, и сразу, без «да»: читает эту беседу и всю личную переписку аккаунта с людьми и сообществами, пишет в беседу, в личку и на стену, удаляет сообщения и посты, исключает, переименовывает, заносит в чёрный список.</small></header>
     {% for u in t.users %}<div class="row trust-row">
       <span class="trust-name">{% if u.user_id %}<a href="https://vk.com/id{{ u.user_id }}">{{ u.name or "id" ~ u.user_id }}</a> <span class="muted">id{{ u.user_id }}{% if u.ref[:1] == "@" %} · по нику {{ u.ref }} из файла{% endif %}</span>{% else %}{{ u.ref }} <span class="muted">ник из файла</span>{% if u.missing %} <span class="badge bad">не найден</span>{% endif %}{% endif %}</span>
       <form method="post" action="/access/users/remove" hx-post="/access/users/remove" hx-target="#trust" hx-swap="outerHTML">

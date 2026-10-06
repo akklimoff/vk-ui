@@ -26,7 +26,7 @@
     <textarea name="text" x-data="autogrow" @input="grow()">{{ c.note }}</textarea>
     <button class="vk-btn">Сохранить</button>
   </form>{% endif %}
-  {% if members %}<h4>Участники <small>{{ members|length }} · доверенный человек просит агента во всех доверенных беседах с правами владельца в них, без «да»</small></h4>
+  {% if members %}<h4>Участники <small>{{ members|length }} · доверенный человек просит агента во всех доверенных беседах с правами владельца в них, без «да»: читает и личную переписку аккаунта</small></h4>
   <ul class="members">{% for uid, name, photo in members %}<li>
     <span class="ava a32">{% if photo %}<img src="{{ photo }}" alt="">{% else %}<i>{{ name[:1] }}</i>{% endif %}</span>
     <a href="https://vk.com/id{{ uid }}">{{ name }}</a>
