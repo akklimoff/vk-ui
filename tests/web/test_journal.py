@@ -132,6 +132,43 @@ def test_only_a_message_the_journal_knows_can_be_deleted(client, settings):
     assert client.app.state.vk is None or client.app.state.vk.deleted == []
 
 
+def damaged(settings, **fields):
+    from dataclasses import asdict
+
+    os.makedirs(settings.state_dir, exist_ok=True)
+    with open(f"{settings.state_dir}/actions.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps({**asdict(record(request="испорченная запись")), **fields}, ensure_ascii=False) + "\n")
+
+
+@pytest.mark.parametrize("fields", [
+    {"ts": "вчера"}, {"ts": None}, {"ts": float("inf")}, {"ts": float("nan")}, {"ts": True}, {"ts": 10 ** 400},
+    {"peer_id": "беседа"}, {"peer_id": 1.5}, {"from_id": None}, {"outcome": ["replied"]}, {"role": {"a": 1}},
+    {"model": 5}, {"request": None}, {"duration_s": "долго"}, {"steps": "много"},
+    {"reply_message_ids": ["21"]}, {"reply_message_ids": [None]}, {"reply_message_ids": [21.5]},
+], ids=lambda fields: next(iter(fields)))
+def test_records_with_fields_of_a_wrong_type_are_skipped(client, settings, fields):
+    log(settings, record(request="целая запись"))
+    damaged(settings, **fields)
+    for url in ("/journal", "/"):
+        for headers in ({}, HX):
+            page = client.get(url, auth=AUTH, headers=headers)
+            assert page.status_code == 200 and "испорченная запись" not in page.text
+    assert "целая запись" in client.get("/journal", auth=AUTH).text
+
+
+@pytest.mark.parametrize("ids", [["x"], [None], [21.5], [21, "22"]])
+def test_reply_with_ids_that_are_not_numbers_cannot_be_deleted(client, settings, ids):
+    damaged(settings, reply_message_ids=ids)
+    assert client.post("/journal/replies/21/delete", auth=AUTH).status_code == 404
+    assert client.app.state.vk is None or client.app.state.vk.deleted == []
+
+
+def test_delete_address_that_is_not_a_number_is_refused(client, settings):
+    log(settings, record(ids=(21,)))
+    assert client.post("/journal/replies/abc/delete", auth=AUTH).status_code == 422
+    assert client.app.state.vk is None or client.app.state.vk.deleted == []
+
+
 def test_delete_failure_is_502_with_the_reason(settings):
     class BrokenVk(FakeVk):
         def delete_message(self, message_id):

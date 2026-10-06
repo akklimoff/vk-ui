@@ -27,6 +27,34 @@ def test_pending_lists_what_is_still_waited_for(settings):
     assert waiting.params == (("message", "пост"), ("owner_id", "-5"))
 
 
+def test_pending_rows_that_never_expire_or_have_no_real_ids_are_skipped(settings):
+    os.makedirs(settings.state_dir, exist_ok=True)
+    with open(f"{settings.state_dir}/pending.json", "w", encoding="utf-8") as f:
+        f.write('{"pending": [{"peer_id": 2000000001, "user_id": 1, "expires_at": Infinity},'
+                ' {"peer_id": 2000000001, "user_id": 1, "expires_at": NaN},'
+                ' {"peer_id": Infinity, "user_id": 1, "expires_at": 1200.0},'
+                ' {"peer_id": 2000000001, "user_id": 2, "expires_at": 1200.0}]}')
+    waiting, = state.pending_now(settings.state_dir, now=1000.0)
+    assert waiting.user_id == 2
+
+
+def test_rejection_rows_with_ids_that_are_not_finite_are_skipped(settings):
+    os.makedirs(settings.state_dir, exist_ok=True)
+    with open(f"{settings.state_dir}/rejections.json", "w", encoding="utf-8") as f:
+        f.write('{"rejections": [{"ts": 2.0, "peer_id": Infinity, "from_id": 9, "reason": "no_tag"},'
+                ' {"ts": Infinity, "peer_id": 2000000001, "from_id": 9, "reason": "no_tag"},'
+                ' {"ts": 1.0, "peer_id": 2000000001, "from_id": 9, "reason": "%s"}]}' % gate.NO_TAG)
+    assert [row.ts for row in state.recent_rejections(settings.state_dir, TrustLists(), {})] == [1.0]
+
+
+def test_person_trusted_by_nick_no_longer_has_a_not_trusted_row(settings):
+    rejections(settings.state_dir, (2.0, CHAT, MASHA, gate.USER_NOT_TRUSTED), (1.0, CHAT, STRANGER, gate.USER_NOT_TRUSTED))
+    by_nick = TrustLists(users=("@masha",), peers=(CHAT,))
+    assert len(state.recent_rejections(settings.state_dir, by_nick, {})) == 2
+    left = state.recent_rejections(settings.state_dir, by_nick, {}, trusted_ids=frozenset({MASHA}))
+    assert [row.from_id for row in left] == [STRANGER]
+
+
 def test_missing_or_garbage_pending_file_means_nothing_waits(settings):
     assert state.pending_now(settings.state_dir, now=1.0) == ()
     os.makedirs(settings.state_dir, exist_ok=True)

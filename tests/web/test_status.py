@@ -5,7 +5,11 @@ from bot.agent import gate
 from bot.agent.journal import ActionLog, ActionRecord
 from bot.agent.rejections import RATE_LIMITED
 from bot.status import write_json_atomic
+from fastapi.testclient import TestClient
+
 from tests.web.conftest import AUTH
+from tests.web.fakes import FakeAi
+from web.app import create_app
 from web.state import status_view
 
 HX = {"HX-Request": "true"}
@@ -136,3 +140,40 @@ def test_untrusted_chat_links_to_the_trust_page_and_the_status_page_grants_nothi
     assert "/rejections/" not in page and page.count("<form") == 1
     assert client.post(f"/rejections/{CHAT}/trust", auth=AUTH).status_code == 404
     assert not os.path.exists(settings.access_file)
+
+
+def test_person_trusted_by_a_hand_written_nick_is_not_shown_as_untrusted(settings):
+    class NickVk:
+        def __init__(self, token):
+            pass
+
+        def resolve_screen_names(self, names):
+            return frozenset({STRANGER}) if names == {"masha"} else frozenset()
+
+    reject(settings, (2.0, CHAT, STRANGER, gate.USER_NOT_TRUSTED, 1))
+    with open(settings.access_file, "w", encoding="utf-8") as f:
+        json.dump({"agent_users": ["@masha"], "agent_peers": [CHAT]}, f)
+    client = TestClient(create_app(settings, vk_factory=NickVk, ai_factory=FakeAi), follow_redirects=False)
+    assert "человек не в доверенных" not in client.get("/", auth=AUTH).text
+
+
+def test_status_page_opens_while_vk_does_not_answer_about_nicks(settings):
+    def no_vk(token):
+        raise RuntimeError("VK недоступен")
+
+    reject(settings, (2.0, CHAT, STRANGER, gate.USER_NOT_TRUSTED, 1))
+    with open(settings.access_file, "w", encoding="utf-8") as f:
+        json.dump({"agent_users": ["@masha"], "agent_peers": [CHAT]}, f)
+    client = TestClient(create_app(settings, vk_factory=no_vk, ai_factory=FakeAi), follow_redirects=False)
+    page = client.get("/", auth=AUTH)
+    assert page.status_code == 200 and "человек не в доверенных" in page.text
+
+
+def test_status_page_opens_over_times_that_are_not_finite(client, settings):
+    os.makedirs(settings.state_dir, exist_ok=True)
+    with open(f"{settings.state_dir}/status.json", "w", encoding="utf-8") as f:
+        f.write('{"started_at": -Infinity, "last_event_at": Infinity, "last_reply_at": NaN}')
+    page = client.get("/", auth=AUTH)
+    assert page.status_code == 200
+    view = status_view(settings.state_dir, now=1000.0)
+    assert (view.connected, view.uptime, view.last_event_ago, view.last_reply_ago) == (False, None, None, None)

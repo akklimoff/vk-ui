@@ -5,6 +5,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from bot.access import AccessFile
 from bot.config import Settings
 from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
 from ai.client import AiError, ai_backend
@@ -20,7 +21,7 @@ from web.render import Renderer, is_hx
 from web.prompts import PromptView, prompt_peers, prompt_view
 from web.services import (BrokenConfig, ceilings, load_runtime_dict, model_groups, model_label,
                           parse_runtime_form, peer_label, peer_link,
-                          runtime_form_values, save_persona, save_runtime_patch, update_config)
+                          runtime_form_values, save_persona, save_runtime_patch, stored_runtime, update_config)
 
 HERE = os.path.dirname(__file__)
 
@@ -74,9 +75,14 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         except ValueError:
             return trust.TrustLists()
 
+    # ники из agent_users разрешаются в id тем же кодом, что у бота, и только при смене файла:
+    # статус перерисовывается сам и не должен ходить в VK на каждый опрос
+    resolved_access = AccessFile(settings.access_file, lambda names: vk().resolve_screen_names(names))
+
     def status_ctx():
         view = state.status_view(settings.state_dir, now=time.time(),
-                                 runtime=load_runtime_dict(settings.runtime_file), lists=trusted_now())
+                                 runtime=load_runtime_dict(settings.runtime_file), lists=trusted_now(),
+                                 trusted_ids=resolved_access.current().agent_users)
         return {"s": view, "page": "status"}
 
     @app.get("/")
@@ -148,7 +154,11 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
 
     @app.get("/settings")
     def settings_page(request: Request):
-        rt = parse_runtime(load_runtime_dict(settings.runtime_file), runtime_defaults(settings))
+        defaults = runtime_defaults(settings)
+        try:
+            rt = stored_runtime(load_runtime_dict(settings.runtime_file), defaults, settings.runtime_file)
+        except BrokenConfig as e:
+            return render.page(request, "settings", {**settings_ctx(runtime_form_values(defaults)), "error": str(e)})
         return render.page(request, "settings", settings_ctx(runtime_form_values(rt)))
 
     @app.post("/settings")
@@ -162,7 +172,8 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
                 # без списка моделей в форме нет выбора, и пустое поле затёрло бы выбранную модель
                 form["active_model"] = current.get("active_model", "")
                 allowed = {form["active_model"]} - {""}
-            rt = parse_runtime({**current, **parse_runtime_form(form, allowed)}, runtime_defaults(settings))
+            entered = parse_runtime_form(form, allowed)
+            rt = stored_runtime({**current, **entered}, runtime_defaults(settings), settings.runtime_file)
             return {**current, **dump_runtime(rt)}
 
         try:

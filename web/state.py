@@ -1,6 +1,8 @@
+import math
 from dataclasses import dataclass
 
 from bot.agent import gate
+from bot.agent.journal import moment
 from bot.agent.rejections import QUEUE_FULL, RATE_LIMITED, Rejection, read_rejections
 from bot.status import read_json
 from web.journal import Entry, read_entries, shown
@@ -52,9 +54,9 @@ def pending_now(state_dir: str, now: float) -> tuple[PendingView, ...]:
             params = raw.get("params") if isinstance(raw.get("params"), dict) else {}
             view = PendingView(int(raw["peer_id"]), int(raw["user_id"]), str(raw.get("title") or raw.get("method") or ""),
                                tuple((str(name), shown(value)) for name, value in params.items()), round(left, 1))
-        except (AttributeError, KeyError, TypeError, ValueError):
+        except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
             continue
-        if left > 0:
+        if math.isfinite(left) and left > 0:
             waiting.append(view)
     return tuple(waiting)
 
@@ -66,12 +68,13 @@ def paused_peers(runtime: dict) -> set[int]:
         return set()
 
 
-def still_holds(row: Rejection, lists: TrustLists, runtime: dict) -> bool:
-    """Отказ, причину которого уже устранили, только путал бы: беседу добавили, а строка всё висит."""
+def still_holds(row: Rejection, lists: TrustLists, runtime: dict, trusted_ids: frozenset[int] = frozenset()) -> bool:
+    """Отказ, причину которого уже устранили, только путал бы: беседу добавили, а строка всё висит.
+    `trusted_ids` — те же люди, что в `lists.users`, но с никами, уже разрешёнными в id: в самих списках ник — строка."""
     if row.reason == gate.CHAT_NOT_TRUSTED:
         return row.peer_id not in lists.peers
     if row.reason == gate.USER_NOT_TRUSTED:
-        return row.from_id not in lists.users
+        return row.from_id not in lists.users and row.from_id not in trusted_ids
     if row.reason == gate.PAUSED:
         return bool(runtime.get("paused")) or row.peer_id in paused_peers(runtime)
     return True
@@ -81,8 +84,10 @@ def trustable(row: Rejection, lists: TrustLists) -> bool:
     return row.reason == gate.CHAT_NOT_TRUSTED and is_chat(row.peer_id) and row.peer_id not in lists.peers
 
 
-def recent_rejections(state_dir: str, lists: TrustLists, runtime: dict, limit: int = 10) -> tuple[RejectionView, ...]:
-    rows = [row for row in read_rejections(f"{state_dir}/rejections.json") if still_holds(row, lists, runtime)]
+def recent_rejections(state_dir: str, lists: TrustLists, runtime: dict, limit: int = 10,
+                      trusted_ids: frozenset[int] = frozenset()) -> tuple[RejectionView, ...]:
+    rows = [row for row in read_rejections(f"{state_dir}/rejections.json")
+            if still_holds(row, lists, runtime, trusted_ids)]
     return tuple(RejectionView(row.ts, row.peer_id, row.from_id, REASONS.get(row.reason, row.reason), row.count,
                                trustable(row, lists)) for row in rows[:limit])
 
@@ -105,17 +110,17 @@ class StatusView:
     rejections: tuple[RejectionView, ...]
 
 
-def status_view(state_dir: str, now: float, runtime: dict | None = None,
-                lists: TrustLists | None = None) -> StatusView:
+def status_view(state_dir: str, now: float, runtime: dict | None = None, lists: TrustLists | None = None,
+                trusted_ids: frozenset[int] = frozenset()) -> StatusView:
     """`runtime` — желаемое состояние из runtime.json; status.json отстаёт от него на flush бота.
-    `lists` — нынешние списки доверия: по ним прячутся отказы, причину которых уже устранили."""
+    `lists` и `trusted_ids` — нынешние списки доверия: по ним прячутся отказы, причину которых уже устранили."""
     d = read_json(f"{state_dir}/status.json", {})
     d = d if isinstance(d, dict) else {}
     desired = d if runtime is None else runtime
     entries = read_entries(state_dir)
 
     def ago(ts):
-        return round(now - ts, 1) if isinstance(ts, (int, float)) else None
+        return round(now - ts, 1) if moment(ts) else None
 
     def errors() -> int:
         try:
@@ -127,7 +132,7 @@ def status_view(state_dir: str, now: float, runtime: dict | None = None,
     answered = str(d.get("model") or "") or next((e.record.model for e in entries if e.record.model), "")
     chosen = str(desired.get("active_model") or "")
     return StatusView(
-        connected=isinstance(last_event, (int, float)) and now - last_event < CONNECTED_WITHIN,
+        connected=moment(last_event) and now - last_event < CONNECTED_WITHIN,
         me_id=d.get("me_id"), me_name=str(d.get("me_name") or ""),
         model=model_label(answered) if answered else "",
         next_model=model_label(chosen) if chosen and chosen != answered else "",
@@ -137,5 +142,5 @@ def status_view(state_dir: str, now: float, runtime: dict | None = None,
         uptime=ago(d.get("started_at")),
         last=entries[0] if entries else None,
         pending=pending_now(state_dir, now),
-        rejections=recent_rejections(state_dir, lists or TrustLists(), desired),
+        rejections=recent_rejections(state_dir, lists or TrustLists(), desired, trusted_ids=trusted_ids),
     )

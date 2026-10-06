@@ -7,6 +7,7 @@ from ai.catalog import find_model
 from ai.personas import persona_path, render_persona
 from bot.agent.loop import Limits
 from bot.config import parse_ids
+from bot.runtime import parse_runtime
 from bot.status import read_json, write_json_atomic
 
 def _object_or_empty(path: str) -> dict:
@@ -37,6 +38,15 @@ def read_config_for_update(path: str) -> dict:
         raise BrokenConfig(f"{name} должен быть JSON-объектом. Исправьте файл вручную: сохранение отменено, "
                            f"чтобы не затереть его содержимое")
     return data
+
+
+def stored_runtime(data: dict, defaults, path: str):
+    """parse_runtime для страниц: значение не того типа в файле — BrokenConfig с именем файла, а не сбой страницы."""
+    try:
+        return parse_runtime(data, defaults)
+    except (AttributeError, TypeError, ValueError) as e:
+        raise BrokenConfig(f"{os.path.basename(path)}: значение не того вида ({e}). Исправьте файл вручную: "
+                           f"до тех пор агент работает по настройкам, которые прочитал в последний раз") from None
 
 
 RUNTIME_FORM_FIELDS = {

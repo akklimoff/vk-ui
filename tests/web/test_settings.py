@@ -103,3 +103,32 @@ def test_parse_runtime_form_names_bad_field():
     assert parse_runtime_form(VALID) == {"temperature": 0.5, "active_model": "", "paused_peers": [7, 2000000005]}
     with pytest.raises(ValueError, match="Модель"):
         parse_runtime_form({**VALID, "active_model": "grok-4.6"})
+
+
+@pytest.mark.parametrize("stored", [{"paused_peers": "abc"}, {"paused_peers": 5}, {"temperature": "hot"},
+                                    {"temperature": [1]}, {"peer_personas": ["x"]}, {"peer_personas": {"abc": "x"}}])
+def test_settings_page_opens_over_values_of_a_wrong_type_and_names_the_file(client, settings, stored):
+    with open(settings.runtime_file, "w", encoding="utf-8") as f:
+        json.dump(stored, f)
+    for headers in ({}, HX):
+        r = client.get("/settings", auth=AUTH, headers=headers)
+        assert r.status_code == 200 and 'class="error"' in r.text and "runtime.json" in r.text
+        assert 'name="temperature"' in r.text
+
+
+@pytest.mark.parametrize("stored", [{"peer_personas": ["x"]}, {"peer_personas": {"abc": "x"}}])
+def test_saving_over_values_the_form_cannot_fix_is_refused_and_names_the_file(client, settings, stored):
+    with open(settings.runtime_file, "w", encoding="utf-8") as f:
+        json.dump(stored, f)
+    assert client.post("/settings", data=VALID, auth=AUTH).status_code == 400
+    r = client.post("/settings", data=VALID, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and "runtime.json" in r.text and 'value="0.5"' in r.text
+    assert saved(settings) == stored
+
+
+def test_saving_replaces_a_broken_value_the_form_owns(client, settings):
+    with open(settings.runtime_file, "w", encoding="utf-8") as f:
+        json.dump({"temperature": "hot", "paused_peers": "abc", "active_persona": "rina"}, f)
+    assert client.post("/settings", data=VALID, auth=AUTH).status_code == 303
+    d = saved(settings)
+    assert d["temperature"] == 0.5 and d["paused_peers"] == [7, 2000000005] and d["active_persona"] == "rina"
