@@ -48,9 +48,6 @@ class FakeVk:
     def resolve_screen_names(self, names):
         return frozenset()
 
-    def history(self, peer_id, count):
-        return HISTORY["items"]
-
 
 @pytest.fixture
 def client(settings):
