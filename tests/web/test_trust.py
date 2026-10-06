@@ -43,16 +43,39 @@ def test_lists_are_read_from_the_three_agent_keys():
     ({"agent_peers": [22]}, "agent_peers"),
     ({"agent_peers": ["²"]}, "agent_peers"),
     pytest.param({"agent_peers": ["9" * 5000]}, "agent_peers", id="too-long-for-int"),
-    ({"peer_prompts": {"²": "заметка"}}, "peer_prompts"),
     ({"peer_prompts": ["заметка"]}, "peer_prompts"),
     ({"peer_prompts": "заметка"}, "peer_prompts"),
-    ({"peer_prompts": {"свои": "заметка"}}, "peer_prompts"),
     ({"peer_prompts": {"2000000001": {"text": "заметка"}}}, "peer_prompts"),
     ({"peer_prompts": {"2000000001": 5}}, "peer_prompts"),
 ])
 def test_foreign_shape_is_an_error_that_names_the_key(stored, key):
     with pytest.raises(TrustError, match=key):
         trust.read_lists(stored)
+
+
+FOREIGN_NOTES = {"697243383": "заметка старого мессенджера о личном диалоге", "²": ["не", "строка"], "свои": {"x": 1},
+                 "0": 5}
+
+
+def test_note_keys_that_are_not_chats_are_carried_and_never_become_chats():
+    lists = trust.read_lists({"agent_peers": [CHAT], "peer_prompts": {**FOREIGN_NOTES, str(CHAT): "свои"}})
+    assert lists.peers == (CHAT,) and lists.notes == {CHAT: "свои"}
+    assert lists.other_notes == FOREIGN_NOTES
+
+
+def test_saving_keeps_foreign_note_keys_value_for_value(tmp_path):
+    path = str(tmp_path / "access.json")
+    write(path, {"agent_users": [5], "agent_peers": [CHAT], "peer_prompts": {**FOREIGN_NOTES, str(CHAT): "свои"}})
+    after = trust.save(path, lambda lists: trust.set_note(trust.untrust_peer(lists, CHAT), OTHER_CHAT, "новые"))
+    assert after.peers == () and after.notes == {CHAT: "свои", OTHER_CHAT: "новые"}
+    assert json.loads(read_text(path))["peer_prompts"] == {**FOREIGN_NOTES, str(CHAT): "свои", str(OTHER_CHAT): "новые"}
+    trust.save(path, lambda lists: trust.set_note(trust.set_note(lists, CHAT, ""), OTHER_CHAT, ""))
+    assert json.loads(read_text(path))["peer_prompts"] == FOREIGN_NOTES
+
+
+def test_foreign_note_keys_are_not_shown_as_chats():
+    lists = trust.read_lists({"peer_prompts": FOREIGN_NOTES})
+    assert trust.trust_view(lists, lambda: None).peers == ()
 
 
 def test_changes_are_pure_and_idempotent():

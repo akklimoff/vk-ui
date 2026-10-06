@@ -21,6 +21,9 @@ class TrustLists:
     users: tuple[int | str, ...] = ()
     peers: tuple[int, ...] = ()
     notes: dict[int, str] = field(default_factory=dict)
+    # ключи peer_prompts, которые не номера бесед (заметки старого мессенджера о личных диалогах):
+    # сохраняются как были и беседами не считаются
+    other_notes: dict[str, object] = field(default_factory=dict)
 
 
 def is_chat(peer_id: int) -> bool:
@@ -65,20 +68,24 @@ def read_lists(stored: dict) -> TrustLists:
         raise TrustError("agent_peers должен быть списком")
     if notes is not None and not isinstance(notes, dict):
         raise TrustError("peer_prompts должен быть объектом «беседа: заметка»")
-    texts = {}
+    texts, foreign = {}, {}
     for ref, value in (notes or {}).items():
-        peer_id = peer_entry(ref, "peer_prompts")
+        try:
+            peer_id = peer_entry(ref, "peer_prompts")
+        except TrustError:
+            foreign[ref] = value
+            continue
         text = note_entry(peer_id, value)
         if text:
             texts[peer_id] = text
     return TrustLists(tuple(dict.fromkeys(user_entry(item) for item in users or [])),
                       tuple(dict.fromkeys(peer_entry(item, "agent_peers") for item in peers or [])),
-                      texts)
+                      texts, foreign)
 
 
 def dump_lists(stored: dict, lists: TrustLists) -> dict:
     return {**stored, "agent_users": list(lists.users), "agent_peers": list(lists.peers),
-            "peer_prompts": {str(peer_id): text for peer_id, text in lists.notes.items()}}
+            "peer_prompts": {**lists.other_notes, **{str(peer_id): text for peer_id, text in lists.notes.items()}}}
 
 
 def load(path: str) -> TrustLists:
