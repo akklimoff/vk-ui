@@ -12,8 +12,7 @@ from web.services import BrokenConfig, read_config_for_update
 HX = {"HX-Request": "true"}
 TRAILING_COMMA = '{"agent_users": ["@masha"], "agent_peers": [2000000001], "peer_prompts": {"2000000001": "свои"},}'
 NOT_AN_OBJECT = '["agent_users"]'
-SETTINGS_FORM = {"temperature": "0.5", "reply_delay_min": "1", "reply_delay_max": "2", "context_messages": "20",
-                 "dm_debounce_seconds": "8", "active_model": "", "paused_peers": ""}
+SETTINGS_FORM = {"temperature": "0.5", "active_model": "", "paused_peers": ""}
 ACCESS_WRITES = [
     ("/access/users", {"ref": "5"}),
     ("/access/users/remove", {"ref": "5"}),

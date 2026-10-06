@@ -8,6 +8,7 @@ from ai.catalog import find_model
 from ai.personas import load_persona, persona_path, render_persona
 from ai.contract import ReplyRequest
 from bot.access import AccessFile, join_lines, scoped_prompts
+from bot.agent.loop import Limits
 from bot.config import parse_ids
 from bot.context import to_lines
 from bot.reply import deliverable
@@ -45,11 +46,23 @@ def read_config_for_update(path: str) -> dict:
 
 RUNTIME_FORM_FIELDS = {
     "temperature": ("Температура", float),
-    "reply_delay_min": ("Задержка ответа от", float),
-    "reply_delay_max": ("Задержка ответа до", float),
-    "context_messages": ("Сообщений контекста", int),
-    "dm_debounce_seconds": ("Пауза перед ответом в личке", float),
 }
+
+
+def ceilings(settings) -> list[tuple[str, str, str]]:
+    """Потолки агента для справки: (название, значение, переменная в .env; пусто — зашито в код)."""
+    limits = Limits()
+    return [
+        ("шагов модели на просьбу", str(settings.agent_max_steps), "AGENT_MAX_STEPS"),
+        ("секунд на просьбу", str(settings.agent_time_budget_seconds), "AGENT_TIME_BUDGET_SECONDS"),
+        ("символов одного результата VK", str(settings.agent_result_char_limit), "AGENT_RESULT_CHAR_LIMIT"),
+        ("секунд ожидания «да»", str(settings.agent_confirm_ttl_seconds), "AGENT_CONFIRM_TTL_SECONDS"),
+        ("вызовов VK на просьбу", str(limits.max_calls), ""),
+        ("из них пишущих", str(limits.max_writes), ""),
+        ("пауза между просьбами одного человека, с", str(settings.user_cooldown_seconds), "USER_COOLDOWN_SECONDS"),
+        ("просьб на чат в час", str(settings.chat_limit_per_hour), "CHAT_LIMIT_PER_HOUR"),
+        ("просьб всего в минуту", str(settings.global_limit_per_minute), "GLOBAL_LIMIT_PER_MINUTE"),
+    ]
 
 
 def runtime_form_values(rt) -> dict[str, str]:

@@ -8,7 +8,6 @@ from fastapi.staticfiles import StaticFiles
 from bot.config import Settings
 from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
 from ai.client import AiError, ai_backend
-from bot.status import write_json_atomic
 from bot.vk import VkClient
 from web.auth import make_guard
 from web.humanize import clock, mmss, plural, short_since
@@ -18,9 +17,9 @@ from ai.personas import list_personas, load_persona
 from common.redact import sanitize_reply
 from web import journal, state, trust
 from web.render import Renderer, is_hx
-from web.services import (BrokenConfig, PromptView, access_raw, load_runtime_dict, model_groups, model_label,
-                          parse_runtime_form, peer_label, peer_link, prompt_view, read_config_for_update,
-                          runtime_form_values, sandbox_reply, save_persona, save_runtime_patch)
+from web.services import (BrokenConfig, PromptView, access_raw, ceilings, load_runtime_dict, model_groups, model_label,
+                          parse_runtime_form, peer_label, peer_link, prompt_view,
+                          runtime_form_values, sandbox_reply, save_persona, save_runtime_patch, update_config)
 
 HERE = os.path.dirname(__file__)
 
@@ -58,6 +57,9 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
             return {"model_groups": model_groups(ai().models()), "default_model": ai().model_id("")}
         except (AiError, ValueError) as e:
             return {"model_groups": [], "default_model": safe_error(e)}
+
+    def settings_ctx(form: dict) -> dict:
+        return {"form": form, "ceilings": ceilings(settings), "page": "settings", **models_ctx()}
 
     def available_model_ids() -> set[str]:
         try:
@@ -146,29 +148,28 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
     @app.get("/settings")
     def settings_page(request: Request):
         rt = parse_runtime(load_runtime_dict(settings.runtime_file), runtime_defaults(settings))
-        return render.page(request, "settings",
-                           {"form": runtime_form_values(rt), "page": "settings", **models_ctx()})
+        return render.page(request, "settings", settings_ctx(runtime_form_values(rt)))
 
     @app.post("/settings")
     async def save_settings(request: Request):
         form = {k: str(v) for k, v in (await request.form()).items()}
-        try:
-            current = read_config_for_update(settings.runtime_file)
-        except BrokenConfig as e:
-            return render.invalid(request, "settings", {"form": form, "page": "settings", **models_ctx()}, str(e))
-        allowed = available_model_ids()
-        if not allowed:
-            # без списка моделей в форме нет выбора, и пустое поле затёрло бы выбранную модель
-            form["active_model"] = current.get("active_model", "")
-            allowed = {form["active_model"]} - {""}
-        try:
+        offered = available_model_ids()
+
+        def change(current: dict) -> dict:
+            allowed = offered
+            if not allowed:
+                # без списка моделей в форме нет выбора, и пустое поле затёрло бы выбранную модель
+                form["active_model"] = current.get("active_model", "")
+                allowed = {form["active_model"]} - {""}
             rt = parse_runtime({**current, **parse_runtime_form(form, allowed)}, runtime_defaults(settings))
+            return {**current, **dump_runtime(rt)}
+
+        try:
+            stored = update_config(settings.runtime_file, change)
         except ValueError as e:
-            return render.invalid(request, "settings",
-                                  {"form": form, "page": "settings", **models_ctx()}, str(e))
-        write_json_atomic(settings.runtime_file, {**current, **dump_runtime(rt)})
-        return render.saved(request, "settings",
-                            {"form": runtime_form_values(rt), "page": "settings", **models_ctx()},
+            return render.invalid(request, "settings", settings_ctx(form), str(e))
+        rt = parse_runtime(stored, runtime_defaults(settings))
+        return render.saved(request, "settings", settings_ctx(runtime_form_values(rt)),
                             toast="Сохранено", redirect="/settings")
 
     @app.post("/settings/pause")

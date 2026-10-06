@@ -165,3 +165,7 @@ article > header > small { display: block; font-weight: normal; }
 .status-row form { margin: 0; }
 
 .trust-ask { padding: 0.6rem; border: 1px solid var(--pico-primary); border-radius: var(--pico-border-radius); }
+
+.ceiling { padding: 0.3rem 0; border-top: 1px solid var(--pico-muted-border-color); }
+.ceiling > span:first-child { flex: 1 1 12rem; }
+.ceiling code { font-size: 0.8em; overflow-wrap: anywhere; }

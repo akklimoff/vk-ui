@@ -53,3 +53,8 @@ def test_create_hx_opens_editor_of_new_persona(client, settings):
     r = client.post("/personas", data={"slug": "bob", "name": "Боб", "prompt": "p"}, auth=AUTH, headers=HX)
     assert r.status_code == 200 and 'hx-post="/personas/bob"' in r.text and "toast" in r.headers["HX-Trigger"]
     assert r.headers["HX-Push-Url"] == "/personas/bob/edit"
+
+
+def test_empty_list_speaks_of_the_agent(client):
+    page = client.get("/personas", auth=AUTH).text
+    assert "агент использует PERSONA_PROMPT" in page and "бот использует" not in page

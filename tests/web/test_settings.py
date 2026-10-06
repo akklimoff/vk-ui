@@ -5,15 +5,55 @@ import pytest
 
 from tests.web.conftest import AUTH
 
+HX = {"HX-Request": "true"}
+VALID = {"temperature": "0.5", "active_model": "", "paused_peers": "2000000005, 7"}
+
+
+def saved(settings):
+    with open(settings.runtime_file, encoding="utf-8") as f:
+        return json.load(f)
+
 
 def test_save_settings_writes_runtime(client, settings):
-    r = client.post("/settings", data={"temperature": "0.5", "reply_delay_min": "1", "reply_delay_max": "2",
-                                       "context_messages": "20", "dm_debounce_seconds": "8",
-                                       "active_model": "claude-opus-5", "paused_peers": "2000000005, 7"}, auth=AUTH)
+    r = client.post("/settings", data={**VALID, "active_model": "claude-opus-5"}, auth=AUTH)
     assert r.status_code == 303
-    d = json.load(open(settings.runtime_file))
-    assert d["temperature"] == 0.5 and d["context_messages"] == 20 and d["paused_peers"] == [7, 2000000005]
-    assert d["active_model"] == "claude-opus-5"
+    d = saved(settings)
+    assert d["temperature"] == 0.5 and d["paused_peers"] == [7, 2000000005] and d["active_model"] == "claude-opus-5"
+
+
+def test_form_offers_only_what_the_agent_reads(client):
+    body = client.get("/settings", auth=AUTH).text
+    assert 'name="temperature"' in body and 'name="paused_peers"' in body and 'name="active_model"' in body
+    for gone in ("reply_delay_min", "reply_delay_max", "context_messages", "dm_debounce_seconds"):
+        assert gone not in body
+
+
+def test_ceilings_are_shown_read_only(client, settings):
+    body = client.get("/settings", auth=AUTH).text
+    for name in ("AGENT_MAX_STEPS", "AGENT_TIME_BUDGET_SECONDS", "AGENT_RESULT_CHAR_LIMIT", "AGENT_CONFIRM_TTL_SECONDS",
+                 "USER_COOLDOWN_SECONDS", "CHAT_LIMIT_PER_HOUR", "GLOBAL_LIMIT_PER_MINUTE"):
+        assert name in body
+    assert 'name="agent_max_steps"' not in body and 'name="AGENT_MAX_STEPS"' not in body
+    assert "перезапуск" in body
+
+
+def test_ceilings_take_values_from_settings_and_the_loop_defaults(settings):
+    from bot.agent.loop import Limits
+    from web.services import ceilings
+
+    rows = {env or title: value for title, value, env in ceilings(settings)}
+    assert rows["AGENT_MAX_STEPS"] == str(settings.agent_max_steps)
+    assert rows["CHAT_LIMIT_PER_HOUR"] == str(settings.chat_limit_per_hour)
+    assert rows["вызовов VK на просьбу"] == str(Limits().max_calls)
+    assert rows["из них пишущих"] == str(Limits().max_writes)
+
+
+def test_saving_keeps_keys_the_form_does_not_show(client, settings):
+    with open(settings.runtime_file, "w", encoding="utf-8") as f:
+        json.dump({"active_persona": "rina", "peer_personas": {"2000000001": "rina"}, "paused": True}, f)
+    client.post("/settings", data=VALID, auth=AUTH)
+    d = saved(settings)
+    assert d["active_persona"] == "rina" and d["peer_personas"] == {"2000000001": "rina"} and d["paused"] is True
 
 
 def test_model_picker_lists_models_of_providers_with_keys(client):
@@ -29,24 +69,16 @@ def test_unknown_model_is_rejected(client, settings):
 
 
 def test_pause_toggle_keeps_other_fields(client, settings):
-    json.dump({"active_persona": "v", "paused": False}, open(settings.runtime_file, "w"))
+    with open(settings.runtime_file, "w", encoding="utf-8") as f:
+        json.dump({"active_persona": "v", "paused": False}, f)
     client.post("/settings/pause", auth=AUTH)
-    d = json.load(open(settings.runtime_file))
-    assert d["paused"] is True and d["active_persona"] == "v"
+    assert saved(settings)["paused"] is True and saved(settings)["active_persona"] == "v"
     client.post("/settings/pause", auth=AUTH)
-    assert json.load(open(settings.runtime_file))["paused"] is False
+    assert saved(settings)["paused"] is False
 
 
 def test_bad_number_returns_400(client):
-    r = client.post("/settings", data={"temperature": "hot", "reply_delay_min": "1", "reply_delay_max": "2",
-                                       "context_messages": "20", "dm_debounce_seconds": "8", "paused_peers": ""}, auth=AUTH)
-    assert r.status_code == 400
-
-
-HX = {"HX-Request": "true"}
-VALID = {"temperature": "0.5", "reply_delay_min": "1", "reply_delay_max": "2",
-         "context_messages": "20", "dm_debounce_seconds": "8", "active_model": "",
-         "paused_peers": "2000000005, 7"}
+    assert client.post("/settings", data={**VALID, "temperature": "hot"}, auth=AUTH).status_code == 400
 
 
 def test_save_settings_hx_returns_form_partial_with_toast(client):
@@ -63,12 +95,11 @@ def test_bad_number_hx_returns_422_with_error_and_kept_input(client, settings):
 
 def test_parse_runtime_form_names_bad_field():
     from web.services import parse_runtime_form
+
     with pytest.raises(ValueError, match="Температура.*hot"):
         parse_runtime_form({**VALID, "temperature": "hot"})
     with pytest.raises(ValueError, match="Чаты на паузе"):
         parse_runtime_form({**VALID, "paused_peers": "1, x"})
-    assert parse_runtime_form(VALID) == {"temperature": 0.5, "reply_delay_min": 1.0, "reply_delay_max": 2.0,
-                                         "context_messages": 20, "dm_debounce_seconds": 8.0,
-                                         "active_model": "", "paused_peers": [7, 2000000005]}
+    assert parse_runtime_form(VALID) == {"temperature": 0.5, "active_model": "", "paused_peers": [7, 2000000005]}
     with pytest.raises(ValueError, match="Модель"):
         parse_runtime_form({**VALID, "active_model": "grok-4.6"})
