@@ -180,7 +180,8 @@ def test_candidate_the_account_has_left_is_flagged(client):
     assert ASKED_HERE in page and "старая беседа" in page and page.count("аккаунт не в беседе") == 1
 
 
-@pytest.mark.parametrize("forged", ["22", "-5", "0", "2000000000", "свои", "²", "2000000001 or 1", ""])
+@pytest.mark.parametrize("forged", ["22", "-5", "0", "2000000000", "свои", "²", "2000000001 or 1", "",
+                                    pytest.param("9" * 5000, id="past-int-limit"), "9" * 30, "2000000000000000001"])
 def test_forged_trust_address_offers_nothing_and_writes_nothing(client, settings, forged):
     page = client.get("/access", params={"trust": forged}, auth=AUTH)
     assert page.status_code == 200 and ASKED_HERE not in page.text

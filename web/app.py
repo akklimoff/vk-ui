@@ -197,8 +197,7 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
 
     @app.get("/access")
     def access_page(request: Request, asked: str = Query("", alias="trust")):
-        # int() читает и «²», и полноширинные цифры; номер беседы — только десятичные цифры ASCII
-        candidate = int(asked) if asked.isascii() and asked.isdigit() else None
+        candidate = int(asked) if trust.WHOLE_NUMBER.fullmatch(asked) else None
         return render.page(request, "access", trust_ctx(candidate=candidate))
 
     @app.post("/access/users")
