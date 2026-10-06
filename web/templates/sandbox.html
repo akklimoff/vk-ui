@@ -10,7 +10,7 @@
           <option value="saved">«Избранное»</option>
           {% for p in peers %}<option value="{{ p }}" {{ 'selected' if form.peer == p|string }}>{{ p|peer_label }}</option>{% endfor %}
         </select></label>
-      <label>Кто просит <small>в «Избранном» — всегда владелец</small>
+      <label>Кто просит <small>в «Избранном» — всегда владелец; в беседе права у обоих одинаковы, «да» спрашивается только в «Избранном»</small>
         <select name="role">
           <option value="owner">владелец</option>
           <option value="trusted" {{ 'selected' if form.role == 'trusted' }}>доверенный человек</option>

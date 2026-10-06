@@ -61,7 +61,7 @@ def ceilings(settings) -> list[tuple[str, str, str]]:
         ("шагов модели на просьбу", str(settings.agent_max_steps), "AGENT_MAX_STEPS"),
         ("секунд на просьбу", str(settings.agent_time_budget_seconds), "AGENT_TIME_BUDGET_SECONDS"),
         ("символов одного результата VK", str(settings.agent_result_char_limit), "AGENT_RESULT_CHAR_LIMIT"),
-        ("секунд ожидания «да»", str(settings.agent_confirm_ttl_seconds), "AGENT_CONFIRM_TTL_SECONDS"),
+        ("секунд ожидания «да» в «Избранном»", str(settings.agent_confirm_ttl_seconds), "AGENT_CONFIRM_TTL_SECONDS"),
         ("вызовов VK на просьбу", str(limits.max_calls), ""),
         ("из них пишущих", str(limits.max_writes), ""),
         ("пауза между просьбами одного человека, с", str(settings.user_cooldown_seconds), "USER_COOLDOWN_SECONDS"),

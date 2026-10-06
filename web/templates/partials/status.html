@@ -19,7 +19,7 @@
     <p class="muted">{{ s.last.who }} <a href="https://vk.com/id{{ r.from_id }}">id{{ r.from_id }}</a> · {{ r.peer_id|peer_label if r.place == "chat" else s.last.where }} · <a href="/journal">весь журнал</a></p>
   </section>{% endif %}
   {% if s.pending %}<section class="status-block">
-    <b>Ждёт «да»</b>
+    <b>Ждёт «да»</b> <small class="muted">подтверждения спрашиваются только в «Избранном»; в беседах агент выполняет сразу</small>
     {% for p in s.pending %}<div class="status-row">
       <div>{{ p.title }} <span class="muted">· {{ p.peer_id|peer_label }} · <a href="https://vk.com/id{{ p.user_id }}">id{{ p.user_id }}</a> · ещё {{ p.seconds_left|duration }}</span></div>
       {% for name, value in p.params %}<div class="call-param"><span class="muted">{{ name }}:</span> {{ value }}</div>{% endfor %}

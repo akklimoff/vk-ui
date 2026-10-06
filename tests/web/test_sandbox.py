@@ -93,19 +93,27 @@ def test_write_is_not_executed_and_the_run_leaves_no_trace(settings):
     assert told.role == "tool" and "dry_run" in told.content
 
 
-def test_trusted_role_gets_only_the_rights_of_a_trusted_person(settings):
+def test_trusted_role_is_named_to_the_model_and_gets_the_rights_of_the_owner(settings):
     trust_chat(settings)
-    client = client_for(settings, says("", call("wall.post", {"message": "пост"})), says("так не могу"))
+    client = client_for(settings, says("", call("messages.delete", {"cmids": "5"})), says("удалила бы"))
     r = client.post("/sandbox", data={**ASK, "peer": str(CHAT), "role": "trusted"}, auth=AUTH)
-    assert "wall.post" in r.text and "отказ" in r.text and client.app.state.vk.calls == []
+    assert "messages.delete" in r.text and "пробный прогон" in r.text and "ждёт «да»" not in r.text
+    assert client.app.state.vk.calls == [] and not os.path.exists(f"{settings.state_dir}/pending.json")
     assert "доверенный человек" in client.app.state.ai.requests[0].turns[0].content
-    assert "wall.post" not in client.app.state.ai.requests[0].tools[0].description
+    assert "wall.post(" in client.app.state.ai.requests[0].tools[0].description
 
 
-def test_destructive_call_of_the_owner_stops_at_the_question(settings):
+def test_destructive_call_of_the_owner_in_a_chat_is_decided_without_a_question(settings):
     trust_chat(settings)
-    client = client_for(settings, says("", call("messages.delete", {"cmids": "5"})))
+    client = client_for(settings, says("", call("messages.delete", {"cmids": "5"})), says("удалила бы"))
     r = client.post("/sandbox", data={**ASK, "peer": str(CHAT)}, auth=AUTH)
+    assert "пробный прогон" in r.text and "ждёт «да»" not in r.text and "Удалить сообщения?" not in r.text
+    assert client.app.state.vk.calls == []
+
+
+def test_destructive_call_in_saved_messages_stops_at_the_question(settings):
+    client = client_for(settings, says("", call("messages.delete", {"cmids": "5", "peer_id": CHAT})))
+    r = client.post("/sandbox", data=ASK, auth=AUTH)
     assert "ждёт «да»" in r.text and "Удалить сообщения?" in r.text
     assert client.app.state.vk.calls == [] and not os.path.exists(f"{settings.state_dir}/pending.json")
 
