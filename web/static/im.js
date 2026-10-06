@@ -200,10 +200,6 @@ document.addEventListener("alpine:init", () => {
       }
     },
     clearFile() { this.file = null; this.$refs.f.value = ""; },
-    draft(t) {
-      this.text = t;
-      this.$nextTick(() => { this.grow(); this.$refs.t.focus(); });
-    },
     grow() { const t = this.$refs.t; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 216) + "px"; },
     quote(d) { this.reply = d; this.$refs.t.focus(); },
     reset() {

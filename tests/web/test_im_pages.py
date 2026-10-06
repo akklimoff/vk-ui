@@ -52,15 +52,10 @@ class FakeVk:
         return HISTORY["items"]
 
 
-class DraftAi(FakeAi):
-    def __init__(self, settings):
-        super().__init__(settings, parts=("черновик от llm",))
-
-
 @pytest.fixture
 def client(settings):
     open(f"{settings.personas_dir}/rina.md", "w").write("# Рина\nперсона")
-    return TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=DraftAi), follow_redirects=False)
+    return TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=FakeAi), follow_redirects=False)
 
 
 def test_im_page_lists_dialogs_with_modes(client):
@@ -209,13 +204,6 @@ def test_send_bad_voice_is_422_without_vk_calls(client):
     assert vk is None or not [c for c in vk.calls if c[0] in ("voice", "send")]
 
 
-def test_draft_route_returns_plain_text_and_sends_nothing(client):
-    r = client.post(f"/im/{PEER_CHAT}/draft", auth=AUTH, headers={"HX-Request": "true"})
-    assert r.status_code == 200 and r.text == "черновик от llm"
-    assert r.headers["content-type"].startswith("text/plain")
-    assert "send" not in [c[0] for c in client.app.state.vk.calls]
-
-
 def test_poll_continues_series_of_same_author(client):
     r = client.get(f"/im/{PEER_CHAT}/messages?after=501&last_from=11&last_ts=1788876200", auth=AUTH, headers={"HX-Request": "true"})
     assert 'class="msg  "' in r.text or 'class="msg "' in r.text        # 502 от Васи без head
@@ -328,7 +316,13 @@ def test_voice_player_renders_wave_bars_and_transcript_toggle(client):
 def test_composer_is_a_vk_card_with_icon_buttons(client):
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
     form = r.text.split('class="im-composer"')[1].split("</form>")[0]
-    assert 'class="box"' in form and "vk-icons.svg#send_24" in form and "vk-icons.svg#magic_wand_outline_24" in form
+    assert 'class="box"' in form and "vk-icons.svg#send_24" in form and "magic_wand" not in form
     assert "vk-icons.svg#add_circle_outline_24" in form and 'placeholder="Сообщение"' in form
     assert ':class="{ ready }"' in form and "✨" not in form
     assert 'class="im-down"' in r.text
+
+
+def test_composer_has_no_draft_button_and_the_route_is_gone(client):
+    page = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH).text
+    assert "Черновик от бота" not in page and "/draft" not in page
+    assert client.post(f"/im/{PEER_CHAT}/draft", auth=AUTH).status_code in (404, 405)

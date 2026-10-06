@@ -51,7 +51,7 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         text = str(e) if app.state.ai is None else app.state.ai.scrub(str(e))
         return sanitize_reply(text, (settings.vk_token,))
 
-    app.include_router(create_router(settings, vk, ai, render, safe_error))
+    app.include_router(create_router(settings, vk, render, safe_error))
 
     def models_ctx() -> dict:
         try:

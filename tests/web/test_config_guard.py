@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from tests.web.conftest import AUTH
 from tests.web.im_fixtures import PEER_CHAT
-from tests.web.test_im_pages import DraftAi, FakeVk
+from tests.web.test_im_pages import FakeAi, FakeVk
 from web.app import create_app
 from web.services import BrokenConfig, read_config_for_update
 
@@ -38,7 +38,7 @@ WRITES = ([("access_file", url, form) for url, form in ACCESS_WRITES]
 def client(settings):
     with open(f"{settings.personas_dir}/rina.md", "w", encoding="utf-8") as f:
         f.write("# Рина\nперсона")
-    return TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=DraftAi), follow_redirects=False)
+    return TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=FakeAi), follow_redirects=False)
 
 
 def spoil(path: str, content: str) -> bytes:
@@ -112,7 +112,7 @@ class VkWithoutMembers(FakeVk):
 
 
 def test_refusal_names_the_file_even_when_the_panel_cannot_be_rebuilt(settings):
-    client = TestClient(create_app(settings, vk_factory=VkWithoutMembers, ai_factory=DraftAi), follow_redirects=False)
+    client = TestClient(create_app(settings, vk_factory=VkWithoutMembers, ai_factory=FakeAi), follow_redirects=False)
     before = spoil(settings.access_file, TRAILING_COMMA)
     r = client.post(f"/im/{PEER_CHAT}/bot/note", data={"text": "новая заметка"}, auth=AUTH, headers=HX)
     assert r.status_code == 422

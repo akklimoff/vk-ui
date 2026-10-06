@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from tests.web.conftest import AUTH
 from tests.web.im_fixtures import ME, PEER_CHAT, PEER_USER
-from tests.web.test_im_pages import DraftAi, FakeVk
+from tests.web.test_im_pages import FakeAi, FakeVk
 from web.app import create_app
 
 HX = {"HX-Request": "true"}
@@ -18,7 +18,7 @@ def client(settings):
     for slug, name in (("rina", "Рина"), ("monika", "Моника")):
         with open(f"{settings.personas_dir}/{slug}.md", "w", encoding="utf-8") as f:
             f.write(f"# {name}\nперсона")
-    return TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=DraftAi), follow_redirects=False)
+    return TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=FakeAi), follow_redirects=False)
 
 
 def access(settings):
@@ -116,7 +116,7 @@ def test_untrusting_a_member_removes_the_nick_written_by_hand(settings):
             return frozenset({11}) if "vasya" in names else frozenset()
 
     write_access(settings, {"agent_users": ["@vasya", 22]})
-    client = TestClient(create_app(settings, vk_factory=NickVk, ai_factory=DraftAi), follow_redirects=False)
+    client = TestClient(create_app(settings, vk_factory=NickVk, ai_factory=FakeAi), follow_redirects=False)
     panel = client.get(f"/im/{PEER_CHAT}/bot", auth=AUTH, headers=HX).text
     assert "checked" in panel.split("Вася Пупкин")[1].split("</li>")[0]
     client.post(f"/im/{PEER_CHAT}/bot/members/11", data={}, auth=AUTH, headers=HX)

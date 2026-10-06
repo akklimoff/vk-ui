@@ -4,7 +4,7 @@ from dataclasses import replace
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response
 
 from bot.access import AccessFile
 from ai.personas import list_personas
@@ -12,7 +12,6 @@ from bot.runtime import RuntimeFile, runtime_defaults
 from bot.agent.journal import ActionLog
 from web import trust
 from web.im.controls import set_paused_peer, set_peer_personas
-from web.im.draft import draft_reply
 from web.im.marks import bot_marks
 from web.im.modes import bot_mode, chat_controls
 from web.im.views import Message, Profiles, is_chat, parse_conversations, parse_history, peer_of, rows
@@ -25,7 +24,7 @@ PAGE = 40
 POLL_WINDOW = 50
 
 
-def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
+def create_router(settings, vk, render, safe_error) -> APIRouter:
     router = APIRouter()
     tz = ZoneInfo(settings.web_timezone)
     # один WatchedFile на процесс: перечитывание и разрешение @ников только при смене mtime,
@@ -146,13 +145,6 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
     def delete_message(request: Request, peer_id: int, message_id: int):
         guard(lambda: vk().delete_message(message_id))
         return Response(status_code=200) if is_hx(request) else RedirectResponse(f"/im?sel={peer_id}", status_code=303)
-
-    @router.post("/im/{peer_id}/draft")
-    def bot_draft(peer_id: int):
-        try:
-            return PlainTextResponse(draft_reply(settings, ai(), vk(), lists(), runtime(), peer_id))
-        except Exception as e:
-            raise HTTPException(502, f"Не удалось получить черновик: {safe_error(e)}")
 
     def bot_ctx(peer_id: int):
         access, rt = lists(), runtime()
