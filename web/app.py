@@ -17,8 +17,9 @@ from ai.personas import list_personas, load_persona
 from common.redact import sanitize_reply
 from web import journal, state, trust
 from web.render import Renderer, is_hx
-from web.services import (BrokenConfig, PromptView, access_raw, ceilings, load_runtime_dict, model_groups, model_label,
-                          parse_runtime_form, peer_label, peer_link, prompt_view,
+from web.prompts import PromptView, prompt_peers, prompt_view
+from web.services import (BrokenConfig, ceilings, load_runtime_dict, model_groups, model_label,
+                          parse_runtime_form, peer_label, peer_link,
                           runtime_form_values, sandbox_reply, save_persona, save_runtime_patch, update_config)
 
 HERE = os.path.dirname(__file__)
@@ -136,14 +137,14 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
                             toast="Сохранено", redirect="/personas")
 
     @app.get("/prompts")
-    def prompts_page(request: Request, user: str | None = None):
+    def prompts_page(request: Request, peer: str = ""):
+        asked = peer.strip()
+        peer_id = int(asked) if asked.isascii() and asked.isdigit() else None
         try:
-            view = prompt_view(settings, ai(), user or None)
+            view = prompt_view(settings, ai(), peer_id)
         except (AiError, ValueError) as e:
-            view = PromptView(persona_slug="", persona_name="", user_key=user or None,
-                              message=safe_error(e), layers=[])
-        keys = sorted((access_raw(settings.access_file).get("user_prompts") or {}).keys())
-        return render.page(request, "prompts", {"v": view, "user_keys": keys, "page": "prompts"})
+            view = PromptView("", "", peer_id, "", safe_error(e), [])
+        return render.page(request, "prompts", {"v": view, "peers": prompt_peers(settings), "page": "prompts"})
 
     @app.get("/settings")
     def settings_page(request: Request):

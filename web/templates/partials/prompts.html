@@ -1,4 +1,5 @@
 <div id="layers">
+  <p>Персона: <b>{{ v.persona_name }}</b></p>
   {% for title, text in v.layers %}<details {{ 'open' if loop.first }}>
     <summary><b>[{{ title }}]</b> <span class="muted">{{ text|length }} симв.</span></summary>
     <pre>{{ text }}</pre>

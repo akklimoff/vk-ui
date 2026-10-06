@@ -1,14 +1,14 @@
 {% extends "base.html" %}{% block body %}
 <article>
   <form method="get" class="row">
-    <span>Персона: <b>{{ v.persona_name }}</b></span>
-    <label style="flex:1 1 14rem">Собеседник (личка)
-      <select name="user" hx-get="/prompts" hx-target="#layers" hx-swap="outerHTML" hx-push-url="true">
-        <option value="">— беседа —</option>
-        {% for k in user_keys %}<option value="{{ k }}" {{ 'selected' if k == v.user_key }}>{{ k }}</option>{% endfor %}
+    <label style="flex:1 1 14rem">Где просят
+      <select name="peer" hx-get="/prompts" hx-target="#layers" hx-swap="outerHTML" hx-push-url="true">
+        <option value="">«Избранное» или беседа без заметки</option>
+        {% for p in peers %}<option value="{{ p }}" {{ 'selected' if p == v.peer_id }}>{{ p|peer_label }}</option>{% endfor %}
       </select></label>
     <noscript><button>Показать</button></noscript>
   </form>
+  <p class="muted">Слои идут по убыванию приоритета: правила агента, заметка о беседе, персона. Заметка и персона не могут отменить правила.</p>
 </article>
 {% include "partials/prompts.html" %}
 {% endblock %}

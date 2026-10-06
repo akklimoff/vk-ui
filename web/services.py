@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ai.catalog import find_model
-from ai.personas import load_persona, persona_path, render_persona
+from ai.personas import persona_path, render_persona
 from ai.contract import ReplyRequest
-from bot.access import AccessFile, join_lines, scoped_prompts
+from bot.access import AccessFile, scoped_prompts
 from bot.agent.loop import Limits
 from bot.config import parse_ids
 from bot.context import to_lines
@@ -127,30 +127,6 @@ def save_persona(personas_dir: str, slug: str, name: str, prompt: str) -> None:
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(render_persona(name, prompt))
     os.replace(tmp, path)
-
-
-@dataclass(frozen=True)
-class PromptView:
-    persona_slug: str
-    persona_name: str
-    user_key: str | None
-    message: str
-    layers: list[tuple[str, str]]
-
-
-def access_raw(path: str) -> dict:
-    return _object_or_empty(path)
-
-
-def prompt_view(settings, ai, user_key: str | None) -> PromptView:
-    slug = load_runtime_dict(settings.runtime_file).get("active_persona", "")
-    persona = load_persona(settings.personas_dir, slug) if slug else None
-    raw = access_raw(settings.access_file)
-    user_prompt = join_lines((raw.get("user_prompts") or {}).get(user_key)) if user_key else ""
-    private_prompt = join_lines(raw.get("private_prompt")) if user_key else ""
-    preview = ai.system_preview(slug, scope_prompt=private_prompt, user_prompt=user_prompt)
-    return PromptView(persona_slug=slug, persona_name=persona.name if persona else "по умолчанию",
-                      user_key=user_key, message=preview.message, layers=list(preview.layers))
 
 
 GROUP_CHAT_PEER_BASE = 2_000_000_000
