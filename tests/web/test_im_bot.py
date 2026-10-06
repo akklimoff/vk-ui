@@ -1,4 +1,6 @@
+import html
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -73,6 +75,18 @@ def test_prompt_goes_to_the_right_layer(client, settings):
     assert access(settings)["peer_prompts"] == {str(PEER_CHAT): "тут все свои"}
     client.post(f"/im/{PEER_USER}/bot/prompt", data={"text": "подруга"}, auth=AUTH, headers=HX)
     assert access(settings)["user_prompts"] == {str(PEER_USER): "подруга"}
+
+
+def test_chat_note_survives_being_posted_back_from_the_panel(client, settings):
+    note = "тут друзья\n2000000002: шутки\n\nи абзац"
+    with open(settings.access_file, "w", encoding="utf-8") as f:
+        json.dump({"peer_prompts": {str(PEER_CHAT): note}}, f, ensure_ascii=False)
+    panel = client.get(f"/im/{PEER_CHAT}/bot", auth=AUTH, headers=HX).text
+    shown = html.unescape(re.search(r'<textarea name="text"[^>]*>(.*?)</textarea>', panel, re.S).group(1))
+    assert shown == note
+    # браузер отправляет переводы строк textarea как CRLF
+    client.post(f"/im/{PEER_CHAT}/bot/prompt", data={"text": shown.replace("\n", "\r\n")}, auth=AUTH, headers=HX)
+    assert access(settings)["peer_prompts"] == {str(PEER_CHAT): note}
 
 
 def test_member_block_in_chat(client, settings):

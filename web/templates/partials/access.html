@@ -23,7 +23,8 @@
         ("peer_prompts", "peer_prompts", "«peer_id: текст», по одному в строке"),
         ("peer_blocked_users", "peer_blocked_users", "кого игнорировать в беседе: «peer_id: @ник id …», по одной беседе в строке")] %}
       <label>{{ title }} <small>{{ hint }}</small>
-        <textarea name="{{ field }}" class="mono" style="min-height:4.5rem" x-data="autogrow" @input="grow()">{{ v[field] }}</textarea></label>
+        <textarea name="{{ field }}" class="mono" style="min-height:4.5rem" x-data="autogrow" @input="grow()">{{ v[field] }}</textarea>
+        {% if unlisted and unlisted.get(field) %}<small>Здесь не показаны и сохраняются как есть заметки не в одну строку: {{ unlisted[field]|join(", ") }}. Их правят в мессенджере, в панели бота нужного чата.</small>{% endif %}</label>
       {% endfor %}
     </details>
     <footer class="sticky-actions"><button>Сохранить</button></footer>

@@ -1,5 +1,6 @@
 import json
 import time
+from dataclasses import replace
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
@@ -16,7 +17,7 @@ from web.im.modes import bot_mode, chat_controls
 from web.im.views import Message, Profiles, is_chat, parse_conversations, parse_history, peer_of, rows
 from web.im.voice import MAX_VOICE_BYTES, prepare_voice
 from web.render import is_hx
-from web.services import access_raw, load_runtime_dict
+from web.services import BrokenConfig, read_config_for_update
 
 DIALOGS = 60
 PAGE = 40
@@ -176,11 +177,22 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
     def bot_page(request: Request, peer_id: int):
         return bot_panel(request, peer_id)
 
+    def not_saved(request: Request, peer_id: int, error: BrokenConfig, **entered):
+        if not is_hx(request):
+            return render.invalid(request, "im_bot", {}, str(error))
+        ctx = guard(lambda: bot_ctx(peer_id))
+        return render.invalid(request, "im_bot", {**ctx, "c": replace(ctx["c"], **entered)}, str(error))
+
     @router.post("/im/{peer_id}/bot/prompt")
     def bot_prompt(request: Request, peer_id: int, text: str = Form("")):
+        # браузер отправляет переводы строк textarea как CRLF, а в заметке они хранятся как \n
+        text = text.replace("\r\n", "\n")
         field = "peer_prompts" if is_chat(peer_id) else "user_prompts"
-        data = set_keyed_text(access_raw(settings.access_file), field, peer_id, text, vk().resolve_screen_names)
-        write_json_atomic(settings.access_file, data)
+        try:
+            stored = read_config_for_update(settings.access_file)
+        except BrokenConfig as e:
+            return not_saved(request, peer_id, e, prompt=text)
+        write_json_atomic(settings.access_file, set_keyed_text(stored, field, peer_id, text, vk().resolve_screen_names))
         return bot_panel(request, peer_id, toast="Промпт сохранён")
 
     @router.post("/im/{peer_id}/bot/personas")
@@ -189,12 +201,20 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
         unknown = [s for s in slug if s not in known]
         if unknown:
             return render.invalid(request, "im_bot", guard(lambda: bot_ctx(peer_id)), f"Нет персоны: {', '.join(unknown)}")
-        write_json_atomic(settings.runtime_file, set_peer_personas(load_runtime_dict(settings.runtime_file), peer_id, slug))
+        try:
+            stored = read_config_for_update(settings.runtime_file)
+        except BrokenConfig as e:
+            return not_saved(request, peer_id, e)
+        write_json_atomic(settings.runtime_file, set_peer_personas(stored, peer_id, slug))
         return bot_panel(request, peer_id, toast="Персоны сохранены")
 
     @router.post("/im/{peer_id}/bot/members/{user_id}")
     def bot_member(request: Request, peer_id: int, user_id: int, on: str = Form("")):
-        data = set_peer_blocked(access_raw(settings.access_file), peer_id, user_id, bool(on), vk().resolve_screen_names)
+        try:
+            stored = read_config_for_update(settings.access_file)
+        except BrokenConfig as e:
+            return not_saved(request, peer_id, e)
+        data = set_peer_blocked(stored, peer_id, user_id, bool(on), vk().resolve_screen_names)
         write_json_atomic(settings.access_file, data)
         return bot_panel(request, peer_id, toast="Сохранено")
 
@@ -206,12 +226,15 @@ def create_router(settings, vk, ai, render, safe_error) -> APIRouter:
         field = peer_field if is_chat(peer_id) else user_field
         if field is None:
             raise HTTPException(404, "только для бесед")
+        path = settings.runtime_file if target == "runtime" else settings.access_file
+        try:
+            stored = read_config_for_update(path)
+        except BrokenConfig as e:
+            return not_saved(request, peer_id, e)
         if target == "runtime":
-            write_json_atomic(settings.runtime_file,
-                              set_paused_peer(load_runtime_dict(settings.runtime_file), peer_id, bool(on)))
+            write_json_atomic(path, set_paused_peer(stored, peer_id, bool(on)))
         else:
-            data = set_member(access_raw(settings.access_file), field, peer_id, bool(on), vk().resolve_screen_names)
-            write_json_atomic(settings.access_file, data)
+            write_json_atomic(path, set_member(stored, field, peer_id, bool(on), vk().resolve_screen_names))
         return bot_panel(request, peer_id, toast="Сохранено")
 
     return router

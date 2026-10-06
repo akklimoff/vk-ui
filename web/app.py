@@ -17,11 +17,11 @@ from web.im.views import presence, preview, wave_bars
 from ai.personas import list_personas, load_persona
 from common.redact import sanitize_reply
 from web.render import Renderer, is_hx
-from web.services import (PromptView, access_form_values, access_raw, load_runtime_dict,
+from web.services import (BrokenConfig, PromptView, access_form_values, access_raw, load_runtime_dict,
                           model_groups, model_label, parse_access_form, parse_runtime_form, peer_label,
                           peer_link,
-                          prompt_view, runtime_form_values, sandbox_reply, save_persona,
-                          save_runtime_patch, status_view)
+                          prompt_view, read_config_for_update, runtime_form_values, sandbox_reply, save_persona,
+                          save_runtime_patch, status_view, unlisted_note_keys)
 
 HERE = os.path.dirname(__file__)
 
@@ -87,7 +87,10 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         persona = load_persona(settings.personas_dir, slug)
         if persona is None:
             raise HTTPException(404)
-        save_runtime_patch(settings.runtime_file, active_persona=slug)
+        try:
+            save_runtime_patch(settings.runtime_file, active_persona=slug)
+        except BrokenConfig as e:
+            return render.invalid(request, "personas", personas_ctx(), str(e))
         return render.saved(request, "personas", personas_ctx(),
                             toast=f"Активна персона «{persona.name}»", redirect="/personas")
 
@@ -143,7 +146,10 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
     @app.post("/settings")
     async def save_settings(request: Request):
         form = {k: str(v) for k, v in (await request.form()).items()}
-        current = load_runtime_dict(settings.runtime_file)
+        try:
+            current = read_config_for_update(settings.runtime_file)
+        except BrokenConfig as e:
+            return render.invalid(request, "settings", {"form": form, "page": "settings", **models_ctx()}, str(e))
         allowed = available_model_ids()
         if not allowed:
             # без списка моделей в форме нет выбора, и пустое поле затёрло бы выбранную модель
@@ -162,25 +168,32 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
     @app.post("/settings/pause")
     def toggle_pause(request: Request):
         paused = not bool(load_runtime_dict(settings.runtime_file).get("paused"))
-        save_runtime_patch(settings.runtime_file, paused=paused)
+        try:
+            save_runtime_patch(settings.runtime_file, paused=paused)
+        except BrokenConfig as e:
+            return render.invalid(request, "status", status_ctx(), str(e))
         return render.saved(request, "status", status_ctx(),
                             toast="Бот на паузе" if paused else "Бот снова отвечает", redirect="/")
 
+    def access_ctx(entered: dict | None = None):
+        values = access_form_values(settings.access_file) if entered is None else entered
+        return {"v": values, "unlisted": unlisted_note_keys(settings.access_file), "page": "access"}
+
     @app.get("/access")
     def access_page(request: Request):
-        return render.page(request, "access", {"v": access_form_values(settings.access_file), "page": "access"})
+        return render.page(request, "access", access_ctx())
 
     @app.post("/access")
     async def save_access(request: Request):
         form = {k: str(v) for k, v in (await request.form()).items()}
         try:
-            data = parse_access_form(form)
+            stored = read_config_for_update(settings.access_file)
+            data = parse_access_form(form, stored)
         except ValueError as e:
-            return render.invalid(request, "access", {"v": form, "page": "access"}, str(e))
+            return render.invalid(request, "access", access_ctx(form), str(e))
         # форма показывает не все ключи файла: agent_users и agent_peers владелец ведёт руками
-        write_json_atomic(settings.access_file, {**access_raw(settings.access_file), **data})
-        return render.saved(request, "access", {"v": access_form_values(settings.access_file), "page": "access"},
-                            toast="Сохранено", redirect="/access")
+        write_json_atomic(settings.access_file, {**stored, **data})
+        return render.saved(request, "access", access_ctx(), toast="Сохранено", redirect="/access")
 
     @app.get("/replies")
     def replies_page(request: Request, peer: int | None = None, after: float = 0.0):

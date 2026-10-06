@@ -1,3 +1,4 @@
+import json
 import os
 from dataclasses import dataclass
 
@@ -54,8 +55,34 @@ def status_view(state_dir: str, now: float, runtime: dict | None = None) -> Stat
     )
 
 
+def _object_or_empty(path: str) -> dict:
+    data = read_json(path, {})
+    return data if isinstance(data, dict) else {}
+
+
 def load_runtime_dict(path: str) -> dict:
-    return read_json(path, {})
+    return _object_or_empty(path)
+
+
+class BrokenConfig(ValueError):
+    """Файл настроек есть, но не разбирается: писать поверх него нельзя."""
+
+
+def read_config_for_update(path: str) -> dict:
+    """Чтение перед записью: нет файла — пустые настройки, а испорченный файл не должен сойти за пустой."""
+    name = os.path.basename(path)
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as e:
+        raise BrokenConfig(f"{name} не читается ({e}). Исправьте файл вручную: сохранение отменено, "
+                           f"чтобы не затереть его содержимое") from e
+    if not isinstance(data, dict):
+        raise BrokenConfig(f"{name} должен быть JSON-объектом. Исправьте файл вручную: сохранение отменено, "
+                           f"чтобы не затереть его содержимое")
+    return data
 
 
 RUNTIME_FORM_FIELDS = {
@@ -107,7 +134,7 @@ def model_label(model_id: str) -> str:
 
 
 def save_runtime_patch(path: str, **fields) -> None:
-    data = load_runtime_dict(path)
+    data = read_config_for_update(path)
     data.update(fields)
     write_json_atomic(path, data)
 
@@ -131,7 +158,7 @@ class PromptView:
 
 
 def access_raw(path: str) -> dict:
-    return read_json(path, {})
+    return _object_or_empty(path)
 
 
 def prompt_view(settings, ai, user_key: str | None) -> PromptView:
@@ -163,12 +190,40 @@ def _keyed_prompts(field: str, text: str) -> dict:
     return prompts
 
 
-def parse_access_form(form: dict) -> dict:
+NOTE_FIELDS = ("user_prompts", "peer_prompts")
+
+
+def _fits_one_line(field: str, key: str, note) -> bool:
+    if not isinstance(note, str):
+        return False
+    try:
+        return _keyed_prompts(field, f"{key}: {note}") == {key: note}
+    except ValueError:
+        return False
+
+
+def _one_line_notes(raw: dict, field: str) -> dict:
+    return {k: v for k, v in (raw.get(field) or {}).items() if _fits_one_line(field, k, v)}
+
+
+def unlisted_notes(raw: dict, field: str) -> dict:
+    """Заметки, которые строка «ключ: текст» исказила бы (многострочные, с пробелами по краям):
+    форма доступа их не показывает и сохраняет как есть."""
+    return {k: v for k, v in (raw.get(field) or {}).items() if not _fits_one_line(field, k, v)}
+
+
+def unlisted_note_keys(path: str) -> dict[str, list[str]]:
+    raw = access_raw(path)
+    return {field: list(unlisted_notes(raw, field)) for field in NOTE_FIELDS}
+
+
+def parse_access_form(form: dict, stored: dict | None = None) -> dict:
+    """`stored` — нынешний access.json: из него берутся заметки, которых в форме нет."""
     data = {field: _lines(form.get(field, "")) for field in ACCESS_LIST_FIELDS}
     data["private_prompt"] = _lines(form.get("private_prompt", ""))
-    data["user_prompts"] = _keyed_prompts("user_prompts", form.get("user_prompts", ""))
     data["chat_prompt"] = _lines(form.get("chat_prompt", ""))
-    data["peer_prompts"] = _keyed_prompts("peer_prompts", form.get("peer_prompts", ""))
+    for field in NOTE_FIELDS:
+        data[field] = {**unlisted_notes(stored or {}, field), **_keyed_prompts(field, form.get(field, ""))}
     data["peer_blocked_users"] = {k: v.replace(",", " ").split()
                                   for k, v in _keyed_prompts("peer_blocked_users",
                                                              form.get("peer_blocked_users", "")).items()}
@@ -183,9 +238,9 @@ def access_form_values(path: str) -> dict:
     raw = access_raw(path)
     values = {field: "\n".join(str(x) for x in raw.get(field) or []) for field in ACCESS_LIST_FIELDS}
     values["private_prompt"] = join_lines(raw.get("private_prompt"))
-    values["user_prompts"] = "\n".join(f"{k}: {join_lines(v)}" for k, v in (raw.get("user_prompts") or {}).items())
     values["chat_prompt"] = join_lines(raw.get("chat_prompt"))
-    values["peer_prompts"] = "\n".join(f"{k}: {join_lines(v)}" for k, v in (raw.get("peer_prompts") or {}).items())
+    for field in NOTE_FIELDS:
+        values[field] = "\n".join(f"{k}: {v}" for k, v in _one_line_notes(raw, field).items())
     values["peer_blocked_users"] = "\n".join(f"{k}: {' '.join(str(x) for x in v or [])}"
                                               for k, v in (raw.get("peer_blocked_users") or {}).items())
     return values
