@@ -2,9 +2,18 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from bot.context import ATTACHMENT_LABELS
-
 GROUP_CHAT_PEER_BASE = 2_000_000_000
+ATTACHMENT_LABELS = {
+    "photo": "[фото]",
+    "video": "[видео]",
+    "audio_message": "[голосовое]",
+    "audio": "[аудио]",
+    "sticker": "[стикер]",
+    "doc": "[документ]",
+    "link": "[ссылка]",
+    "graffiti": "[граффити]",
+    "wall": "[репост]",
+}
 SERIES_GAP = 300.0
 MONTHS = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
           "сентября", "октября", "ноября", "декабря")
