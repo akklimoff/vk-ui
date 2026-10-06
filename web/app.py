@@ -313,7 +313,8 @@ def main() -> None:
     import uvicorn
 
     # порт наружу не публикуется, до uvicorn доходит только Caddy — его X-Forwarded-For можно доверять
-    uvicorn.run(create_app(Settings()), host="0.0.0.0", port=8080,
+    settings = Settings()
+    uvicorn.run(create_app(settings), host=settings.web_host, port=8080,
                 proxy_headers=True, forwarded_allow_ips="*")
 
 
