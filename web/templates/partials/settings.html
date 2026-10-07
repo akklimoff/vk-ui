@@ -10,7 +10,7 @@
       </select></label>
     <label>Температура <small>0 — предсказуемо, 1 — креативно; Claude 5 её не принимает</small>
       <input name="temperature" value="{{ form.temperature }}" type="text" inputmode="decimal" required></label>
-    <label>Чаты на паузе <small>peer_id через запятую; в них агент не откликается на тег</small>
+    <label>Чаты на паузе <small>peer_id через запятую; в них агент не откликается на обращение</small>
       <input name="paused_peers" value="{{ form.paused_peers }}" type="text" inputmode="numeric"></label>
     <details>
       <summary><b>Потолки агента</b> <span class="muted">только для чтения</span></summary>

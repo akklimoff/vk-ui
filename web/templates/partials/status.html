@@ -26,7 +26,7 @@
     </div>{% endfor %}
   </section>{% endif %}
   {% if s.rejections %}<section class="status-block">
-    <b>Почему промолчала</b> <small class="muted">последние сообщения с тегом, на которые агент не ответил; текст сообщений не хранится</small>
+    <b>Почему промолчала</b> <small class="muted">последние обращения к агенту по тегу или имени, на которые агент не ответил; текст сообщений не хранится</small>
     {% for r in s.rejections %}<div class="row status-row">
       <span class="trust-name"><span data-ts="{{ r.ts }}" x-data x-text="localTime($el.dataset.ts)"></span>
         · <a href="{{ r.peer_id|peer_link }}">{{ r.peer_id|peer_label }}</a>{% if r.from_id > 0 %} · <a href="https://vk.com/id{{ r.from_id }}">id{{ r.from_id }}</a>{% endif %}

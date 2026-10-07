@@ -9,12 +9,12 @@
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
   {% if c.chat or c.saved %}<h4>Слышит ли агент</h4>
   {% if c.chat %}<form hx-post="/im/{{ peer_id }}/bot/listens" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
-    <label class="switch-row"><span>Слушать эту беседу<small>откликаться здесь на тег владельца и доверенных людей</small></span><input type="checkbox" role="switch" class="sw" name="on" value="1" {{ 'checked' if c.listens }}></label>
+    <label class="switch-row"><span>Слушать эту беседу<small>откликаться здесь на обращение владельца и доверенных людей: тег, имя персоны, ответ на сообщение аккаунта</small></span><input type="checkbox" role="switch" class="sw" name="on" value="1" {{ 'checked' if c.listens }}></label>
   </form>{% endif %}
   <form hx-post="/im/{{ peer_id }}/bot/paused" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
-    <label class="switch-row"><span>Пауза в этом чате<small>на тег здесь агент не откликается, пока пауза не снята</small></span><input type="checkbox" role="switch" class="sw" name="on" value="1" {{ 'checked' if c.paused }}></label>
+    <label class="switch-row"><span>Пауза в этом чате<small>на обращение здесь агент не откликается, пока пауза не снята</small></span><input type="checkbox" role="switch" class="sw" name="on" value="1" {{ 'checked' if c.paused }}></label>
   </form>
-  {% else %}<p class="muted">В личных диалогах агент не работает: он откликается на тег только в доверенных беседах и в «Избранном».</p>{% endif %}
+  {% else %}<p class="muted">В личных диалогах агент не работает: он откликается на обращение только в доверенных беседах и в «Избранном».</p>{% endif %}
   <label class="switch-row" x-data="readMark"><span>Читать без отметки<small>VK не увидит, что сообщения прочитаны; во всех чатах этого браузера</small></span>
     <input type="checkbox" role="switch" class="sw" :checked="silent" @change="toggle($event.target.checked)"></label>
   {% if c.chat or c.saved %}<h4>Персоны <small>пусто — активная «{{ active or 'по умолчанию' }}»; несколько — случайная на каждую просьбу</small></h4>

@@ -19,7 +19,7 @@ REASONS = {
     gate.COMMUNITY_SENDER: "пишет сообщество",
     gate.ADDRESSED_TO_BOTS: "сообщение со слешем — оно для ботов",
     gate.NO_SENDER: "у события нет автора",
-    gate.NO_TAG: "нет тега",
+    gate.NO_TAG: "нет обращения",
     RATE_LIMITED: "слишком часто: сработал лимит частоты",
     QUEUE_FULL: "очередь просьб была полна",
 }

@@ -2,7 +2,7 @@
 <form method="post" action="/sandbox" hx-post="/sandbox" hx-target="#sandbox-result" hx-swap="outerHTML show:top" hx-disabled-elt="find button">
   <article>
     <p class="muted">Пробный прогон: агент получает просьбу и работает как настоящий, но в VK ничего не пишет, ответ не отправляет и записи в журнале не оставляет. Читает из VK по-настоящему.</p>
-    <label>Просьба <small>как её написали бы после тега</small>
+    <label>Просьба <small>как её написали бы в обращении к агенту</small>
       <textarea name="text" x-data="autogrow" @input="grow()" required>{{ form.text }}</textarea></label>
     <div class="grid">
       <label>Где просят
