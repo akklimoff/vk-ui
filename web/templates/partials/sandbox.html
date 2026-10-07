@@ -9,7 +9,7 @@
       {% if c.reason %}<div class="muted">{{ c.reason }}</div>{% endif %}
       {% for name, value in c.params %}<div class="call-param"><span class="muted">{{ name }}:</span> {{ value }}</div>{% endfor %}
     </li>{% endfor %}</ul>{% else %}<p class="muted">Вызовов не было.</p>{% endif %}
-    <p class="muted journal-meta">шагов {{ result.steps }} · {{ result.prompt_tokens }}+{{ result.completion_tokens }} ток.{% if result.model %} · {{ result.model|model_label }}{% endif %}</p>
+    <p class="muted journal-meta">шагов {{ result.steps }} · {{ result.prompt_tokens }}+{{ result.completion_tokens }} ток.{% if result.cached_tokens %} (из кэша {{ result.cached_tokens }}){% endif %}{% if result.model %} · {{ result.model|model_label }}{% endif %}</p>
     <p class="muted">Результаты вызовов здесь не показываются: в них чужая переписка.</p>
     <details>
       <summary>Первое сообщение, которое получила модель</summary>

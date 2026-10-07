@@ -17,7 +17,7 @@
     </li>{% endfor %}</ul>
   </details>{% endif %}
   {% if r.reply %}<p class="reply-text"><span class="muted">ответ:</span> {{ r.reply }}</p>{% endif %}
-  <p class="muted journal-meta">шагов {{ r.steps }} · {{ r.duration_s }} с · {{ r.prompt_tokens }}+{{ r.completion_tokens }} ток.{% if r.model %} · {{ r.model|model_label }}{% endif %} · {{ r.persona or "персона по умолчанию" }}</p>
+  <p class="muted journal-meta">шагов {{ r.steps }} · {{ r.duration_s }} с · {{ r.prompt_tokens }}+{{ r.completion_tokens }} ток.{% if r.cached_tokens %} (из кэша {{ r.cached_tokens }}){% endif %}{% if r.model %} · {{ r.model|model_label }}{% endif %} · {{ r.persona or "персона по умолчанию" }}</p>
   {% if r.reply_message_ids %}<footer class="row">
     <button type="button" class="outline secondary" x-show="!ask" @click="ask = true">Удалить ответ в VK</button>
     <span class="row" x-show="ask" x-cloak>

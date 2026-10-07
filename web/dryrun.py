@@ -26,6 +26,7 @@ class DryRun:
     model: str
     prompt_tokens: int
     completion_tokens: int
+    cached_tokens: int
     first_turn: str
     ai_error: str
 
@@ -77,6 +78,6 @@ def dry_run(settings, ai, vk, *, text: str, peer: str, role: str, persona: str, 
         calls=tuple(call_view(call_entry(call, secrets)) for call in outcome.calls),
         steps=outcome.steps, model=outcome.model_id,
         prompt_tokens=outcome.prompt_tokens, completion_tokens=outcome.completion_tokens,
-        first_turn=first_turn(request, caller),
+        cached_tokens=outcome.cached_tokens, first_turn=first_turn(request, caller),
         ai_error=safe_error(watched.error) if watched.error is not None else "",
     )
