@@ -116,3 +116,10 @@ def test_rows_mark_first_unread_incoming_message():
     assert [r.unread for r in rows(messages, now, TZ, in_read=500)] == [False, False, False, True]
     assert not any(r.unread for r in rows(messages, now, TZ))
     assert not any(r.unread for r in rows(messages, now, TZ, in_read=502))
+
+
+def test_only_web_addresses_become_links():
+    doc = {"type": "doc", "doc": {"url": "javascript:alert(1)", "title": "файл"}}
+    link = {"type": "link", "link": {"url": "https://example.org/a", "title": "сайт"}}
+    assert attachment_of(doc).url == "" and attachment_of(doc).title == "файл"
+    assert attachment_of(link).url == "https://example.org/a"

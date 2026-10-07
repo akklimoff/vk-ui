@@ -111,6 +111,8 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
         data = voice.file.read(MAX_VOICE_BYTES + 1) if voice is not None and voice.filename else b""
         if not text and not data:
             return send_form_error(request, "Пустое сообщение")
+        if reply_to.strip() and not reply_to.strip().isdecimal():
+            return send_form_error(request, "Непонятно, на какое сообщение ответ")
         reply_id = int(reply_to) if reply_to.strip() else None
         try:
             ogg = prepare_voice(data, voice.filename) if data else b""
@@ -204,7 +206,7 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
     def runtime_change(request: Request, peer_id: int, change, toast: str):
         try:
             update_config(settings.runtime_file, change)
-        except ValueError as e:
+        except (ValueError, TypeError) as e:
             return not_saved(request, peer_id, e)
         return bot_panel(request, peer_id, toast=toast)
 

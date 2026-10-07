@@ -10,6 +10,8 @@ from web.services import model_label
 from web.trust import TrustLists, is_chat
 
 CONNECTED_WITHIN = 90.0
+# бот пишет статус раз в 5 секунд, long poll отвечает не реже раза в 25
+HEARTBEAT_WITHIN = 30.0
 
 REASONS = {
     gate.CHAT_NOT_TRUSTED: "беседа не в доверенных",
@@ -128,11 +130,19 @@ def status_view(state_dir: str, now: float, runtime: dict | None = None, lists: 
         except (TypeError, ValueError):
             return 0
 
+    def fresh(ts, within: float) -> bool:
+        return moment(ts) and now - ts < within
+
     last_event = d.get("last_event_at")
+    if "heartbeat_at" in d:
+        connected = fresh(d["heartbeat_at"], HEARTBEAT_WITHIN) and fresh(d.get("last_poll_at"), CONNECTED_WITHIN)
+    else:
+        # статус от бота, который ещё не писал heartbeat: о связи судим по последнему сообщению
+        connected = fresh(last_event, CONNECTED_WITHIN)
     answered = str(d.get("model") or "") or next((e.record.model for e in entries if e.record.model), "")
     chosen = str(desired.get("active_model") or "")
     return StatusView(
-        connected=moment(last_event) and now - last_event < CONNECTED_WITHIN,
+        connected=connected,
         me_id=d.get("me_id"), me_name=str(d.get("me_name") or ""),
         model=model_label(answered) if answered else "",
         next_model=model_label(chosen) if chosen and chosen != answered else "",

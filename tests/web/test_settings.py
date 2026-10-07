@@ -132,3 +132,10 @@ def test_saving_replaces_a_broken_value_the_form_owns(client, settings):
     assert client.post("/settings", data=VALID, auth=AUTH).status_code == 303
     d = saved(settings)
     assert d["temperature"] == 0.5 and d["paused_peers"] == [7, 2000000005] and d["active_persona"] == "rina"
+
+
+@pytest.mark.parametrize("value", ["8", "-0.1", "nan", "inf"])
+def test_temperature_out_of_range_is_refused(client, settings, value):
+    r = client.post("/settings", data={**VALID, "temperature": value}, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and "от 0 до 2" in r.text
+    assert not os.path.exists(settings.runtime_file) or "temperature" not in open(settings.runtime_file).read()

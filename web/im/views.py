@@ -121,6 +121,11 @@ class Profiles:
         return int((self._users.get(uid) or {}).get("sex", 0))
 
 
+def web_link(url) -> str:
+    """Адрес из VK попадает в href: всё, кроме http(s), ссылкой не становится."""
+    return url if isinstance(url, str) and url.startswith(("https://", "http://")) else ""
+
+
 def attachment_of(att: dict) -> Attachment:
     kind = att.get("type", "")
     body = att.get(kind) or {}
@@ -141,14 +146,14 @@ def attachment_of(att: dict) -> Attachment:
                           transcript=body.get("transcript", "") if done else "",
                           waveform=tuple(int(v) for v in body.get("waveform") or ()))
     if kind == "doc":
-        return Attachment("doc", url=body.get("url", ""), title=body.get("title") or "документ")
+        return Attachment("doc", url=web_link(body.get("url")), title=body.get("title") or "документ")
     if kind == "video":
         images = body.get("image") or []
         return Attachment("video", preview=images[-1]["url"] if images else "", title=body.get("title") or "видео")
     if kind == "audio":
         return Attachment("audio", title=" — ".join(x for x in (body.get("artist"), body.get("title")) if x))
     if kind == "link":
-        return Attachment("link", url=body.get("url", ""), title=body.get("title") or body.get("url", ""))
+        return Attachment("link", url=web_link(body.get("url")), title=body.get("title") or body.get("url", ""))
     if kind == "wall":
         return Attachment("wall", title="репост")
     return Attachment("other", title=ATTACHMENT_LABELS.get(kind, "[вложение]").strip("[]"))

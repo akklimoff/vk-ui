@@ -58,3 +58,12 @@ def test_create_hx_opens_editor_of_new_persona(client, settings):
 def test_empty_list_speaks_of_the_agent(client):
     page = client.get("/personas", auth=AUTH).text
     assert "агент использует PERSONA_PROMPT" in page and "бот использует" not in page
+
+
+def test_create_does_not_overwrite_an_existing_persona(client, settings):
+    first = {"slug": "bob", "name": "Боб", "prompt": "Ты — Боб."}
+    assert client.post("/personas", data=first, auth=AUTH).status_code == 303
+    r = client.post("/personas", data={**first, "prompt": "другой"}, auth=AUTH, headers=HX)
+    assert r.status_code == 422 and "уже есть" in r.text and ">другой</textarea>" in r.text
+    assert open(f"{settings.personas_dir}/bob.md").read() == "# Боб\n\nТы — Боб.\n"
+    assert client.post("/personas/bob", data={"name": "Боб", "prompt": "новый"}, auth=AUTH).status_code == 303

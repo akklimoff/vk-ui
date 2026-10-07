@@ -19,9 +19,10 @@ from common.redact import sanitize_reply
 from web import dryrun, journal, state, trust
 from web.render import Renderer, is_hx
 from web.prompts import PromptView, prompt_peers, prompt_view
-from web.services import (BrokenConfig, ceilings, load_runtime_dict, model_groups, model_label,
+from web.services import (BrokenConfig, ceilings, load_runtime_dict, model_groups, model_label, new_persona,
                           parse_runtime_form, peer_label, peer_link,
-                          runtime_form_values, save_persona, save_runtime_patch, stored_runtime, update_config)
+                          runtime_form_values, save_persona, save_runtime_patch, stored_runtime, temperature_of,
+                          update_config)
 
 HERE = os.path.dirname(__file__)
 
@@ -154,7 +155,7 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
     def create_persona(request: Request, slug: str = Form(), name: str = Form(), prompt: str = Form()):
         slug = slug.strip()
         try:
-            save_persona(settings.personas_dir, slug, name, prompt)
+            new_persona(settings.personas_dir, slug, name, prompt)
         except ValueError as e:
             form = {"slug": slug, "name": name, "prompt": prompt}
             return render.invalid(request, "persona_edit", {"persona": None, "form": form, "page": "personas"}, str(e))
@@ -330,9 +331,9 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         if not text.strip():
             return render.invalid(request, "sandbox", sandbox_ctx(**shown), "Напишите просьбу")
         try:
-            temp = float(temperature) if temperature.strip() else None
-        except ValueError:
-            return render.invalid(request, "sandbox", sandbox_ctx(**shown), "Температура должна быть числом")
+            temp = temperature_of(temperature.strip()) if temperature.strip() else None
+        except ValueError as e:
+            return render.invalid(request, "sandbox", sandbox_ctx(**shown), str(e))
         try:
             result = dryrun.dry_run(settings, ai(), vk(), text=text, peer=peer, role=role, persona=persona,
                                     model=model, temperature=temp, safe_error=safe_error)

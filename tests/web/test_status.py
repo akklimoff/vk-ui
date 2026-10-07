@@ -44,6 +44,19 @@ def test_status_view_connected_by_recent_event(settings):
     assert not status_view(settings.state_dir, now=2000.0).connected
 
 
+def test_a_quiet_account_stays_connected_while_the_bot_beats_and_polls(settings):
+    def view(now, **fields):
+        write_json_atomic(f"{settings.state_dir}/status.json",
+                          {"me_id": 1, "last_event_at": 10.0, "heartbeat_at": 1000.0, "last_poll_at": 990.0, **fields})
+        return status_view(settings.state_dir, now=now)
+
+    quiet = view(1005.0)
+    assert quiet.connected and quiet.last_event_ago == 995.0
+    assert not view(1100.0).connected
+    assert not view(1005.0, last_poll_at=800.0).connected
+    assert not view(1005.0, last_poll_at=None).connected
+
+
 def test_status_page_without_state_shows_offline(client):
     r = client.get("/", auth=AUTH)
     assert r.status_code == 200 and "не подключён" in r.text and "ещё не отвечала" in r.text
@@ -81,7 +94,7 @@ def test_model_is_the_one_that_answered_last(settings):
 
 def test_status_json_of_the_previous_version_still_renders(client, settings):
     write_json_atomic(f"{settings.state_dir}/status.json",
-                      {"me_id": 1, "me_name": "Валя", "provider": "grok", "model": "grok-4.3", "last_event_at": 1.0})
+                      {"me_id": 1, "me_name": "Валя", "model": "grok-4.3", "last_event_at": 1.0})
     from web.services import model_label
 
     page = client.get("/", auth=AUTH)

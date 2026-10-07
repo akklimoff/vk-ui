@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import threading
 from typing import Callable
@@ -49,8 +50,21 @@ def stored_runtime(data: dict, defaults, path: str):
                            f"до тех пор агент работает по настройкам, которые прочитал в последний раз") from None
 
 
+MAX_TEMPERATURE = 2.0
+
+
+def temperature_of(raw: str) -> float:
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ValueError(f"Температура: нужно число, а не «{raw}»") from None
+    if not (math.isfinite(value) and 0 <= value <= MAX_TEMPERATURE):
+        raise ValueError(f"Температура: от 0 до {MAX_TEMPERATURE:g}, а не «{raw}»")
+    return value
+
+
 RUNTIME_FORM_FIELDS = {
-    "temperature": ("Температура", float),
+    "temperature": ("Температура", temperature_of),
 }
 
 
@@ -79,12 +93,9 @@ def runtime_form_values(rt) -> dict[str, str]:
 
 def parse_runtime_form(form: dict, allowed_models=()) -> dict:
     data = {}
-    for field, (title, cast) in RUNTIME_FORM_FIELDS.items():
+    for field, (_, cast) in RUNTIME_FORM_FIELDS.items():
         raw = (form.get(field) or "").strip()
-        try:
-            data[field] = cast(raw)
-        except ValueError:
-            raise ValueError(f"{title}: нужно число, а не «{raw}»") from None
+        data[field] = cast(raw)
     model = (form.get("active_model") or "").strip()
     if model and model not in allowed_models:
         raise ValueError(f"Модель: «{model}» недоступна, проверьте ключ провайдера в .env")
@@ -123,6 +134,12 @@ def update_config(path: str, change: Callable[[dict], dict]) -> dict:
 
 def save_runtime_patch(path: str, **fields) -> None:
     update_config(path, lambda data: {**data, **fields})
+
+
+def new_persona(personas_dir: str, slug: str, name: str, prompt: str) -> None:
+    if os.path.exists(persona_path(personas_dir, slug)):
+        raise ValueError(f"Персона «{slug}» уже есть: откройте её для правки или возьмите другое имя файла")
+    save_persona(personas_dir, slug, name, prompt)
 
 
 def save_persona(personas_dir: str, slug: str, name: str, prompt: str) -> None:

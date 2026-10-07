@@ -150,7 +150,8 @@ def test_hx_returns_only_the_result(settings):
 
 def test_empty_request_and_bad_temperature_are_form_errors(settings):
     client = client_for(settings, says("ок"))
-    for form in ({**ASK, "text": "  "}, {**ASK, "temperature": "hot"}):
+    for form in ({**ASK, "text": "  "}, {**ASK, "temperature": "hot"}, {**ASK, "temperature": "8"},
+                 {**ASK, "temperature": "nan"}):
         r = client.post("/sandbox", data=form, auth=AUTH, headers=HX)
         assert r.status_code == 422 and 'class="error"' in r.text
         assert client.post("/sandbox", data=form, auth=AUTH).status_code == 400
