@@ -10,8 +10,8 @@ from web.services import model_label
 from web.trust import TrustLists, is_chat
 
 CONNECTED_WITHIN = 90.0
-# бот пишет статус раз в 5 секунд, long poll отвечает не реже раза в 25
-HEARTBEAT_WITHIN = 30.0
+# бот пишет статус раз в 5 секунд, но между записями может до 35 секунд ждать ответа VK
+HEARTBEAT_WITHIN = 60.0
 
 REASONS = {
     gate.CHAT_NOT_TRUSTED: "беседа не в доверенных",

@@ -3,8 +3,8 @@ import binascii
 import hashlib
 import hmac
 import secrets
+import threading
 import time
-from collections import defaultdict
 from urllib.parse import quote
 
 from fastapi import HTTPException, Request, status
@@ -31,21 +31,30 @@ class LoginLimiter:
         self._max = max_failures
         self._block = block_seconds
         self._now = now
-        self._failures: dict[str, list[float]] = defaultdict(list)
+        self._failures: dict[str, list[float]] = {}
+        # маршруты идут в пуле потоков: без блокировки пачка одновременных попыток вся проходит проверку
+        self._lock = threading.Lock()
 
     def _recent(self, ip: str) -> list[float]:
         cutoff = self._now() - self._block
-        self._failures[ip] = [t for t in self._failures[ip] if t > cutoff]
-        return self._failures[ip]
+        recent = [t for t in self._failures.get(ip, ()) if t > cutoff]
+        if recent:
+            self._failures[ip] = recent
+        else:
+            self._failures.pop(ip, None)
+        return recent
 
-    def blocked(self, ip: str) -> bool:
-        return len(self._recent(ip)) >= self._max
-
-    def failed(self, ip: str) -> None:
-        self._recent(ip).append(self._now())
-
-    def succeeded(self, ip: str) -> None:
-        self._failures.pop(ip, None)
+    def attempt(self, ip: str, right: bool) -> bool | None:
+        """Одна попытка входа целиком: None — адрес заблокирован, иначе верен ли пароль."""
+        with self._lock:
+            recent = self._recent(ip)
+            if len(recent) >= self._max:
+                return None
+            if right:
+                self._failures.pop(ip, None)
+            else:
+                self._failures[ip] = [*recent, self._now()]
+            return right
 
 
 def session_token(password: str) -> str:
@@ -109,14 +118,11 @@ class Auth:
         return secrets.compare_digest(given.encode(), self._token.encode())
 
     def check(self, request: Request, typed: str) -> bool:
-        ip = client_ip(request)
-        if self._limiter.blocked(ip):
+        right = secrets.compare_digest(typed.encode(), self._password.encode())
+        allowed = self._limiter.attempt(client_ip(request), right)
+        if allowed is None:
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, BLOCKED)
-        if not secrets.compare_digest(typed.encode(), self._password.encode()):
-            self._limiter.failed(ip)
-            return False
-        self._limiter.succeeded(ip)
-        return True
+        return allowed
 
     def remember(self, request: Request, response: Response) -> Response:
         secure = request.headers.get("X-Forwarded-Proto", request.url.scheme) == "https"

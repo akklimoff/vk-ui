@@ -6,20 +6,32 @@ def test_limiter_blocks_after_max_failures():
     clock = [0.0]
     lim = LoginLimiter(max_failures=3, block_seconds=100, now=lambda: clock[0])
     for _ in range(3):
-        assert not lim.blocked("1.1.1.1")
-        lim.failed("1.1.1.1")
-    assert lim.blocked("1.1.1.1")
-    assert not lim.blocked("2.2.2.2")
+        assert lim.attempt("1.1.1.1", False) is False
+    assert lim.attempt("1.1.1.1", True) is None
+    assert lim.attempt("2.2.2.2", False) is False
     clock[0] = 101
-    assert not lim.blocked("1.1.1.1")
+    assert lim.attempt("1.1.1.1", True) is True
 
 
 def test_success_resets_failures():
     lim = LoginLimiter(max_failures=2, block_seconds=100, now=lambda: 0.0)
-    lim.failed("ip")
-    lim.succeeded("ip")
-    lim.failed("ip")
-    assert not lim.blocked("ip")
+    assert lim.attempt("ip", False) is False
+    assert lim.attempt("ip", True) is True
+    assert lim.attempt("ip", False) is False
+    assert lim.attempt("ip", True) is True
+
+
+def test_limiter_counts_simultaneous_wrong_passwords_and_forgets_expired_addresses():
+    from concurrent.futures import ThreadPoolExecutor
+
+    clock = [0.0]
+    lim = LoginLimiter(max_failures=5, block_seconds=100, now=lambda: clock[0])
+    with ThreadPoolExecutor(16) as pool:
+        answers = list(pool.map(lambda _: lim.attempt("ip", False), range(200)))
+    assert answers.count(False) == 5 and answers.count(None) == 195
+    clock[0] = 101
+    assert lim.attempt("ip", True) is True
+    assert lim._failures == {}
 
 
 def test_too_many_wrong_passwords_return_429(client):
