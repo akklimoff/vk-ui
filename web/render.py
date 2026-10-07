@@ -49,6 +49,10 @@ class Renderer:
         template = f"partials/{name}.html" if is_hx(request) else f"{name}.html"
         return self._templates.TemplateResponse(request, template, ctx, status_code=status)
 
+    def full(self, request: Request, name: str, ctx: dict, status: int = 200) -> Response:
+        """Страница без partial-пары: её не подгружают по частям."""
+        return self._templates.TemplateResponse(request, f"{name}.html", ctx, status_code=status)
+
     def partial(self, request: Request, name: str, ctx: dict, *, toast: str | dict | None = None,
                 status: int = 200, push_url: str | None = None) -> Response:
         headers = {}

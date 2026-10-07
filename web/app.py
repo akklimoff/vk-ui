@@ -10,7 +10,7 @@ from bot.config import Settings
 from bot.runtime import dump_runtime, parse_runtime, runtime_defaults
 from ai.client import AiError, ai_backend
 from bot.vk import VkClient
-from web.auth import make_guard
+from web.auth import BLOCKED, LOGIN_PATH, WRONG_PASSWORD, Auth, NotLoggedIn, same_site, safe_next, to_login
 from web.humanize import clock, mmss, plural, short_since
 from web.im.routes import create_router
 from web.im.views import presence, preview, wave_bars
@@ -29,8 +29,20 @@ HERE = os.path.dirname(__file__)
 def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -> FastAPI:
     if not settings.web_password:
         raise RuntimeError("WEB_PASSWORD не задан")
-    guard = make_guard(settings.web_password)
-    app = FastAPI(dependencies=[Depends(guard)])
+    auth = Auth(settings.web_password)
+    app = FastAPI(dependencies=[Depends(auth.guard)])
+
+    @app.exception_handler(NotLoggedIn)
+    async def not_logged_in(request: Request, exc: NotLoggedIn):
+        return to_login(request)
+
+    @app.middleware("http")
+    async def keep_session(request: Request, call_next):
+        response = await call_next(request)
+        if getattr(request.state, "session", False) and request.url.path != "/logout":
+            auth.remember(request, response)
+        return response
+
     app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
     render = Renderer(os.path.join(HERE, "templates"), peer_label=peer_label, peer_link=peer_link,
                       model_label=model_label, clock=clock, mmss=mmss, plural=plural, preview=preview,
@@ -53,6 +65,31 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         return sanitize_reply(text, (settings.vk_token,))
 
     app.include_router(create_router(settings, vk, render, safe_error))
+
+    def login_page(request: Request, target: str, error: str = "", status: int = 200) -> Response:
+        return render.full(request, "login", {"next": safe_next(target), "error": error, "page": "login"}, status)
+
+    @app.get(LOGIN_PATH)
+    def login_form(request: Request, next: str = "/"):
+        if auth.has_session(request):
+            return RedirectResponse(safe_next(next), status_code=303)
+        return login_page(request, next)
+
+    @app.post(LOGIN_PATH)
+    def login(request: Request, password: str = Form(""), next: str = Form("/")):
+        if not same_site(request):
+            raise HTTPException(403, "Запрос с чужого сайта")
+        try:
+            passed = auth.check(request, password)
+        except HTTPException:
+            return login_page(request, next, BLOCKED, 429)
+        if not passed:
+            return login_page(request, next, WRONG_PASSWORD, 401)
+        return auth.remember(request, RedirectResponse(safe_next(next), status_code=303))
+
+    @app.post("/logout")
+    def logout():
+        return auth.forget(RedirectResponse(LOGIN_PATH, status_code=303))
 
     def models_ctx() -> dict:
         try:

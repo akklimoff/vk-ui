@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block nav %}{% endblock %}
+{% block main_class %}container login{% endblock %}
+{% block body %}
+<article class="login-card">
+  <header><b>Вход в админку</b></header>
+  {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <input type="text" name="username" value="admin" autocomplete="username" hidden>
+    <label>Пароль
+      <input type="password" name="password" autocomplete="current-password" required autofocus>
+    </label>
+    <button type="submit">Войти</button>
+    <small class="muted">Вход запоминается на этом устройстве, пока не выйдешь или не сменится пароль.</small>
+  </form>
+</article>
+{% endblock %}

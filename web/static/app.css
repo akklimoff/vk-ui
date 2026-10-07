@@ -33,6 +33,18 @@
   text-decoration: none;
   white-space: nowrap;
 }
+.topnav .logout { margin-left: auto; }
+.topnav .logout form { margin: 0; }
+.topnav .logout button {
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 0.55rem 0.8rem;
+  border: 0;
+  background: none;
+  color: var(--pico-muted-color);
+  white-space: nowrap;
+}
 .topnav a[aria-current] {
   background: var(--pico-primary);
   color: var(--pico-primary-inverse);
@@ -169,3 +181,7 @@ article > header > small { display: block; font-weight: normal; }
 .ceiling { padding: 0.3rem 0; border-top: 1px solid var(--pico-muted-border-color); }
 .ceiling > span:first-child { flex: 1 1 12rem; }
 .ceiling code { font-size: 0.8em; overflow-wrap: anywhere; }
+
+main.login { display: grid; min-height: 100dvh; place-items: center; padding-bottom: 1rem; }
+.login-card { width: min(100%, 24rem); margin: 0; }
+.login-card form { margin: 0; }

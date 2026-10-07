@@ -29,7 +29,7 @@ def reject(settings, *rows):
 
 
 def test_requires_auth(client):
-    assert client.get("/").status_code == 401
+    assert client.get("/").status_code == 303
     assert client.get("/", auth=("x", "wrong")).status_code == 401
     assert client.get("/", auth=AUTH).status_code == 200
 
@@ -137,7 +137,7 @@ def test_untrusted_chat_links_to_the_trust_page_and_the_status_page_grants_nothi
     reject(settings, (2.0, CHAT, STRANGER, gate.CHAT_NOT_TRUSTED, 3), (1.0, 22, STRANGER, gate.PRIVATE_DIALOG, 1))
     page = client.get("/", auth=AUTH).text
     assert page.count("Доверять беседе") == 1 and f'href="/access?trust={CHAT}"' in page
-    assert "/rejections/" not in page and page.count("<form") == 1
+    assert "/rejections/" not in page and page.count("<form") - page.count('action="/logout"') == 1
     assert client.post(f"/rejections/{CHAT}/trust", auth=AUTH).status_code == 404
     assert not os.path.exists(settings.access_file)
 

@@ -18,6 +18,7 @@
 {% block nav %}<nav class="topnav" aria-label="Разделы">
   <ul>{% for item in nav %}
     <li><a href="{{ item.href }}" {% if page == item.key %}aria-current="page"{% endif %}>{{ item.title }}</a></li>{% endfor %}
+    <li class="logout"><form method="post" action="/logout"><button type="submit">Выйти</button></form></li>
   </ul>
 </nav>{% endblock %}
 <main class="{% block main_class %}container{% endblock %}">{% block body %}{% endblock %}</main>
