@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from bot.agent.gate import CHAT, OWNER, SAVED, TRUSTED, Caller
 from bot.agent.journal import call_entry
 from bot.agent.loop import Limits, run
+from bot.agent.pictures import data_url
 from bot.agent.request import Request, first_turn, format_now, mentions_in, without_self_mention
 from bot.reply import deliverable
 from web import trust
@@ -68,7 +69,7 @@ def dry_run(settings, ai, vk, *, text: str, peer: str, role: str, persona: str, 
     watched = Watched(ai)
     outcome = run(request, caller, watched, vk.call, me_id=me_id, secrets=secrets, persona=persona,
                   peer_note=lists.notes.get(peer_id, ""), model=model, temperature=temperature, limits=limits,
-                  dry_run=True)
+                  dry_run=True, see=lambda url: data_url(*fetched) if (fetched := vk.fetch_image(url)) else None)
     title, kind = OUTCOMES.get(outcome.kind, (outcome.kind, ""))
     return DryRun(
         outcome=title, outcome_kind=kind,
