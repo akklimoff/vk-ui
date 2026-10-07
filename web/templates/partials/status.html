@@ -7,7 +7,7 @@
   </header>
   <div class="stats">
     <div class="stat"><small>персона</small><b>{{ s.active_persona or "по умолчанию" }}</b></div>
-    <div class="stat"><small>модель последнего ответа</small><b>{{ s.model or "ещё не отвечала" }}</b>{% if s.next_model %} <span class="muted">дальше — {{ s.next_model }}</span>{% endif %}</div>
+    <div class="stat"><small>модель</small><b>{{ s.model or "ещё не отвечала" }}</b>{% if s.next_model %} <span class="muted">дальше — {{ s.next_model }}</span>{% endif %}</div>
     <div class="stat"><small>последнее событие</small><b>{{ s.last_event_ago|ago }}</b></div>
     <div class="stat"><small>последний ответ</small><b>{{ s.last_reply_ago|ago }}</b></div>
     <div class="stat"><small>ошибок за час</small><b class="{{ 'bad' if s.errors_last_hour }}">{{ s.errors_last_hour }}</b></div>

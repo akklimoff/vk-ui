@@ -57,3 +57,7 @@ function localTime(ts) {
     day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
   });
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelector(".topnav [aria-current]")?.scrollIntoView({ inline: "center", block: "nearest" });
+});

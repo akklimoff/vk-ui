@@ -45,7 +45,7 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
         return response
 
     app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
-    render = Renderer(os.path.join(HERE, "templates"), peer_label=peer_label, peer_link=peer_link,
+    render = Renderer(os.path.join(HERE, "templates"), os.path.join(HERE, "static"), peer_label=peer_label, peer_link=peer_link,
                       model_label=model_label, clock=clock, mmss=mmss, plural=plural, preview=preview,
                       since=short_since, presence=presence, wave_bars=wave_bars)
     app.state.vk = None

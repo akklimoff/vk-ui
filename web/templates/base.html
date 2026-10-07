@@ -6,20 +6,20 @@
 <meta name="color-scheme" content="light dark">
 <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
 <title>vk-bot</title>
-<link rel="stylesheet" href="/static/pico.min.css">
-<link rel="stylesheet" href="/static/app.css">
-<link rel="stylesheet" href="/static/im.css">
-<script src="/static/htmx.min.js"></script>
-<script src="/static/app.js"></script>
-<script src="/static/im.js"></script>
-<script defer src="/static/alpine.min.js"></script>
+<link rel="stylesheet" href="{{ asset('pico.min.css') }}">
+<link rel="stylesheet" href="{{ asset('app.css') }}">
+<link rel="stylesheet" href="{{ asset('im.css') }}">
+<script src="{{ asset('htmx.min.js') }}"></script>
+<script src="{{ asset('app.js') }}"></script>
+<script src="{{ asset('im.js') }}"></script>
+<script defer src="{{ asset('alpine.min.js') }}"></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
 {% block nav %}<nav class="topnav" aria-label="Разделы">
   <ul>{% for item in nav %}
     <li><a href="{{ item.href }}" {% if page == item.key %}aria-current="page"{% endif %}>{{ item.title }}</a></li>{% endfor %}
-    <li class="logout"><form method="post" action="/logout"><button type="submit">Выйти</button></form></li>
   </ul>
+  <form class="logout" method="post" action="/logout"><button type="submit">Выйти</button></form>
 </nav>{% endblock %}
 <main class="{% block main_class %}container{% endblock %}">{% block body %}{% endblock %}</main>
 <div class="toasts" x-data aria-live="polite">

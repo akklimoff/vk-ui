@@ -1,4 +1,5 @@
 import json
+import os
 from typing import NamedTuple
 
 from fastapi import HTTPException, Request
@@ -27,6 +28,18 @@ NAV = (
 )
 
 
+def asset_urls(static_dir: str):
+    """Адрес файла из static с меткой его версии: без неё браузер после выкладки держит прежние стили и скрипты."""
+    def asset(name: str) -> str:
+        try:
+            version = int(os.stat(os.path.join(static_dir, name)).st_mtime)
+        except OSError:
+            version = 0
+        return f"/static/{name}?v={version}"
+
+    return asset
+
+
 def is_hx(request: Request) -> bool:
     """При промахе кэша истории htmx просит полную страницу, хотя шлёт HX-Request."""
     return (request.headers.get("HX-Request") == "true"
@@ -40,10 +53,10 @@ class Renderer:
     или partial с тостом/ошибкой.
     """
 
-    def __init__(self, templates_dir: str, **filters):
+    def __init__(self, templates_dir: str, static_dir: str = "", **filters):
         self._templates = Jinja2Templates(directory=templates_dir)
         self._templates.env.filters.update({"ago": ago, "duration": duration, **filters})
-        self._templates.env.globals["nav"] = NAV
+        self._templates.env.globals.update(nav=NAV, asset=asset_urls(static_dir))
 
     def page(self, request: Request, name: str, ctx: dict, status: int = 200) -> Response:
         template = f"partials/{name}.html" if is_hx(request) else f"{name}.html"

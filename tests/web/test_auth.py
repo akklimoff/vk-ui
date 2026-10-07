@@ -139,3 +139,11 @@ def test_after_login_the_visitor_is_returned_only_inside_the_site():
     for target in ("https://evil.example", "//evil.example", "/\\evil.example", "javascript:alert(1)", "", None,
                    "/a\nb"):
         assert safe_next(target) == "/"
+
+
+def test_styles_and_scripts_carry_their_version(client):
+    import re
+
+    page = client.get("/login").text
+    assert re.search(r'href="/static/app\.css\?v=[1-9]\d*"', page) and re.search(r'src="/static/app\.js\?v=[1-9]\d*"', page)
+    assert client.get(re.search(r'/static/app\.css\?v=\d+', page)[0]).status_code == 200
