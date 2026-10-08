@@ -3,6 +3,14 @@
   --pico-spacing: 0.9rem;
   --pico-form-element-spacing-vertical: 0.6rem;
   --pico-form-element-spacing-horizontal: 0.9rem;
+  --on-accent: #fff;
+}
+/* в тёмной теме акцентные цвета Pico светлые: белый текст на них не читается, приглушённый — на карточке тоже */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --on-accent: #0b1220;
+    --pico-muted-color: #8a93a6;
+  }
 }
 
 .topnav {
@@ -51,7 +59,7 @@
   white-space: nowrap;
 }
 .topnav a[aria-current] {
-  background: var(--pico-primary);
+  background: var(--pico-primary-background);
   color: var(--pico-primary-inverse);
 }
 @media (min-width: 768px) { .topnav ul { mask-image: none; } }
@@ -84,8 +92,8 @@ label > small { display: block; color: var(--pico-muted-color); font-weight: nor
   background: var(--pico-secondary-background);
   color: var(--pico-secondary-inverse);
 }
-.badge.ok { background: var(--pico-ins-color); color: #fff; }
-.badge.bad { background: var(--pico-del-color); color: #fff; }
+.badge.ok { background: var(--pico-ins-color); color: var(--on-accent); }
+.badge.bad { background: var(--pico-del-color); color: var(--on-accent); }
 
 .error {
   padding: 0.6rem 0.9rem;
@@ -119,7 +127,7 @@ label > small { display: block; color: var(--pico-muted-color); font-weight: nor
   font-size: 0.9em;
 }
 .chip[aria-current] {
-  background: var(--pico-primary);
+  background: var(--pico-primary-background);
   color: var(--pico-primary-inverse);
   border-color: transparent;
 }
@@ -149,7 +157,7 @@ details > summary { padding: 0.5rem 0; }
   padding: 0.65rem 1.1rem;
   border-radius: var(--pico-border-radius);
   background: var(--pico-ins-color);
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: var(--pico-card-box-shadow);
   pointer-events: auto;
   cursor: pointer;
