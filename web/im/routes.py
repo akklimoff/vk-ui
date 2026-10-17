@@ -1,29 +1,36 @@
+import hashlib
 import json
+import threading
 import time
 from dataclasses import replace
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
 from bot.access import AccessFile
 from ai.personas import list_personas
 from bot.runtime import RuntimeFile, runtime_defaults
-from bot.agent.journal import ActionLog
 from web import trust
 from web.im.controls import set_paused_peer, set_peer_personas
-from web.im.marks import bot_marks
+from web.im.events import inbox_events, stamp
+from web.im.marks import MarksFile
 from web.im.modes import bot_mode, chat_controls
-from web.im.views import (Message, Profiles, is_chat, parse_conversations, parse_history, parse_photos, peer_of,
-                          rows)
+from web.im.uploads import MAX_PHOTO_BYTES, MAX_PHOTOS, prepare_photos
+from web.im.views import (Message, Profiles, is_chat, parse_conversations, parse_history, parse_media, parse_search,
+                          peer_of, rows)
 from web.im.voice import MAX_VOICE_BYTES, prepare_voice
 from web.render import is_hx
 from web.services import update_config
 
 DIALOGS = 60
+MAX_DIALOGS = 200
+SEARCH = 20
 PAGE = 40
 POLL_WINDOW = 50
-PHOTOS = 60
+MEDIA_PAGE = 60
+MEDIA_TABS = {"photo": "Фото", "video": "Видео", "doc": "Файлы", "link": "Ссылки", "audio_message": "Голосовые"}
+WARM_TTL = 10.0
 
 
 def create_router(settings, vk, render, safe_error) -> APIRouter:
@@ -33,6 +40,12 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
     # иначе каждый тик поллинга ходил бы в users.get
     access_file = AccessFile(settings.access_file, lambda names: vk().resolve_screen_names(names))
     runtime_file = RuntimeFile(settings.runtime_file, runtime_defaults(settings))
+    marks_file = MarksFile(f"{settings.state_dir}/actions.jsonl")
+    inbox = f"{settings.state_dir}/inbox.json"
+    # ответ VK на открытие чата, запрошенный при наведении на диалог: клик забирает его, не дожидаясь VK;
+    # отметка inbox.json — на момент запроса: если с тех пор переписка менялась, ответ устарел
+    warmed: dict[int, tuple[float, int, dict]] = {}
+    warmed_lock = threading.Lock()
 
     def lists():
         return access_file.current()
@@ -41,13 +54,24 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
         return runtime_file.current()
 
     def marks():
-        return bot_marks(ActionLog(f"{settings.state_dir}/actions.jsonl").read())
+        return marks_file.current()
 
-    def dialogs_ctx():
+    def dialogs_ctx(count: int = DIALOGS, offset: int = 0):
         access, rt = lists(), runtime()
-        dialogs = parse_conversations(vk().conversations(DIALOGS), vk().me_id, marks())
+        raw = vk().conversations(count, offset)
+        dialogs = parse_conversations(raw, vk().me_id, marks())
+        loaded = offset + len(dialogs)
+        more = loaded if dialogs and loaded < min(int(raw.get("count", 0)), MAX_DIALOGS) else None
         return {"dialogs": [(d, bot_mode(d.peer.id, access, rt, vk().me_id)) for d in dialogs], "tz": tz,
-                "now": time.time()}
+                "now": time.time(), "more": more, "mark_read": rt.mark_read}
+
+    def history(peer_id: int, count: int, before: int | None):
+        if before is None and count == PAGE:
+            with warmed_lock:
+                at, mark, raw = warmed.pop(peer_id, (0.0, 0, None))
+            if raw is not None and time.monotonic() - at < WARM_TTL and mark == stamp(inbox):
+                return raw
+        return vk().history_page(peer_id, count, before_id=before)
 
     def rendered_tail(last_from: int | None, last_ts: float | None) -> Message | None:
         if last_from is None or last_ts is None:
@@ -56,17 +80,18 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
 
     def chat_ctx(peer_id: int, before: int | None = None, after: int | None = None, prev: Message | None = None):
         count = POLL_WINDOW if after else PAGE
-        raw = vk().history_page(peer_id, count, before_id=before)
+        raw = history(peer_id, count, before) if not after else vk().history_page(peer_id, count)
         messages, out_read = parse_history(raw, vk().me_id, marks())
         full_page = len(messages) >= count
         if after:
             messages = [m for m in messages if m.id > after]
         convs = raw.get("conversations") or []
         peer = peer_of(convs[0], Profiles(raw)) if convs else None
-        opening = convs and not after and not before and convs[0].get("unread_count")
+        unread = int(convs[0].get("unread_count", 0)) if convs else 0
+        opening = convs and not after and not before and unread
         in_read = int(convs[0].get("in_read", 0)) if opening else None
         now = time.time()
-        return {"peer": peer, "peer_id": peer_id, "rows": rows(messages, now, tz, prev, in_read),
+        return {"peer": peer, "peer_id": peer_id, "rows": rows(messages, now, tz, prev, in_read), "unread": unread,
                 "out_read": out_read, "oldest": messages[0].id if messages and full_page else None,
                 "mode": bot_mode(peer_id, lists(), runtime(), vk().me_id), "tz": tz, "now": now, "page": "im"}
 
@@ -87,8 +112,50 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
         return render.page(request, "im", ctx)
 
     @router.get("/im/dialogs")
-    def dialogs_partial(request: Request):
-        return render.partial(request, "im_dialogs", {"page": "im", **guard(dialogs_ctx)})
+    def dialogs_partial(request: Request, count: int = DIALOGS, v: str = ""):
+        """Тот же список, что уже на экране, отвечает 204: перерисовка без изменений сбивала бы наведение и прокрутку."""
+        count = max(1, min(count, MAX_DIALOGS))
+        response = render.partial(request, "im_dialogs", {"page": "im", **guard(lambda: dialogs_ctx(count))})
+        version = hashlib.sha1(response.body).hexdigest()[:16]
+        if version == v:
+            return Response(status_code=204)
+        response.headers["X-Dialogs-Version"] = version
+        return response
+
+    @router.get("/im/dialogs/more")
+    def dialogs_more(request: Request, offset: int):
+        count = min(DIALOGS, MAX_DIALOGS - offset)
+        if count <= 0:
+            return render.partial(request, "im_dialogs", {"page": "im", "dialogs": [], "more": None})
+        return render.partial(request, "im_dialogs", {"page": "im", **guard(lambda: dialogs_ctx(count, offset))})
+
+    @router.get("/im/dialogs/search")
+    def dialogs_search(request: Request, q: str = ""):
+        q = q.strip()
+        if not q:
+            return render.partial(request, "im_search", {"page": "im", "dialogs": [], "q": ""})
+        access, rt = lists(), runtime()
+        found = parse_search(guard(lambda: vk().search_conversations(q, SEARCH)), vk().me_id)
+        return render.partial(request, "im_search", {"page": "im", "q": q, "tz": tz, "now": time.time(),
+                                                     "dialogs": [(d, bot_mode(d.peer.id, access, rt, vk().me_id))
+                                                                 for d in found]})
+
+    @router.get("/im/events")
+    async def inbox_stream(request: Request):
+        return StreamingResponse(inbox_events(inbox, request.is_disconnected),
+                                 media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @router.post("/im/read-marks")
+    def read_marks(request: Request, on: str = Form("")):
+        try:
+            update_config(settings.runtime_file, lambda stored: {**stored, "mark_read": bool(on)})
+        except (ValueError, TypeError) as e:
+            return render.invalid(request, "im_error", {"page": "im"}, str(e))
+        if not is_hx(request):
+            return RedirectResponse("/im", status_code=303)
+        toast = "Открытые чаты отмечаются прочитанными" if on else "Открытые чаты не отмечаются прочитанными"
+        return Response(status_code=204, headers={"HX-Trigger": json.dumps({"toast": toast})})
 
     @router.get("/im/{peer_id}/messages")
     def messages_partial(request: Request, peer_id: int, after: int | None = None, before: int | None = None,
@@ -106,26 +173,36 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
 
     @router.post("/im/{peer_id}/send")
     def send_message(request: Request, peer_id: int, text: str = Form(""), reply_to: str = Form(""),
-                     voice: UploadFile | None = File(None), after: int = Form(0),
-                     last_from: int | None = Form(None), last_ts: float | None = Form(None)):
+                     voice: UploadFile | None = File(None), photos: list[UploadFile] = File([]),
+                     after: int = Form(0), last_from: int | None = Form(None), last_ts: float | None = Form(None)):
         text = text.strip()
         # на байт больше лимита — чтобы sniff_voice увидел превышение, не читая гигабайты
         data = voice.file.read(MAX_VOICE_BYTES + 1) if voice is not None and voice.filename else b""
-        if not text and not data:
+        picked = [f for f in photos if f.filename][:MAX_PHOTOS + 1]
+        pictures = [(f.file.read(MAX_PHOTO_BYTES + 1), f.filename) for f in picked]
+        if not text and not data and not pictures:
             return send_form_error(request, "Пустое сообщение")
         if reply_to.strip() and not reply_to.strip().isdecimal():
             return send_form_error(request, "Непонятно, на какое сообщение ответ")
         reply_id = int(reply_to) if reply_to.strip() else None
         try:
             ogg = prepare_voice(data, voice.filename) if data else b""
+            images = prepare_photos(pictures)
         except ValueError as e:
             return send_form_error(request, str(e))
+        if ogg and images:
+            # VK кладёт голосовое в сообщение только одно, без других вложений
+            return send_form_error(request, "Голосовое отправляется без фото: убери одно из двух")
         try:
-            attachment = vk().upload_voice(peer_id, ogg, "ogg") if ogg else ""
+            attachments = vk().upload_photos(peer_id, images) if images else []
+        except Exception as e:
+            return send_form_error(request, f"VK не принял фото: {safe_error(e)}")
+        try:
+            attachments += [vk().upload_voice(peer_id, ogg, "ogg")] if ogg else []
         except Exception as e:
             return send_form_error(request, f"VK не принял голосовое: {safe_error(e)}")
         try:
-            vk().send(peer_id, text, reply_to=reply_id, attachment=attachment)
+            vk().send(peer_id, text, reply_to=reply_id, attachment=",".join(attachments))
         except Exception as e:
             return send_form_error(request, f"VK не отправил: {safe_error(e)}")
         if not is_hx(request):
@@ -140,13 +217,30 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
         return render.partial(request, "im_rows_page", {"chat": ctx, "after": after, "before": None, "page": "im"},
                               toast="Отправлено")
 
-    @router.get("/im/{peer_id}/photos")
-    def photos_partial(request: Request, peer_id: int, start_from: str = ""):
+    @router.post("/im/{peer_id}/warm")
+    def warm_chat(peer_id: int):
+        now, mark = time.monotonic(), stamp(inbox)
+        with warmed_lock:
+            for stale in [p for p, (at, _, _) in warmed.items() if now - at >= WARM_TTL]:
+                del warmed[stale]
+            if peer_id in warmed:
+                return Response(status_code=204)
+        raw = guard(lambda: vk().history_page(peer_id, PAGE))
+        with warmed_lock:
+            warmed[peer_id] = (now, mark, raw)
+        return Response(status_code=204)
+
+    @router.get("/im/{peer_id}/media")
+    def media_partial(request: Request, peer_id: int, type: str = "photo", start_from: str = "", tab: str = ""):
+        """tab — сменили вкладку: только её содержимое; start_from — следующая страница: только плитки."""
         if not is_hx(request):
             return RedirectResponse(f"/im?sel={peer_id}", status_code=303)
-        photos, next_from = parse_photos(guard(lambda: vk().history_photos(peer_id, PHOTOS, start_from)))
-        return render.partial(request, "im_photos", {"peer_id": peer_id, "photos": photos, "next_from": next_from,
-                                                     "more": bool(start_from), "page": "im"})
+        if type not in MEDIA_TABS:
+            raise HTTPException(404, "нет такого вида вложений")
+        items, next_from = parse_media(guard(lambda: vk().history_media(peer_id, type, MEDIA_PAGE, start_from)), type)
+        return render.partial(request, "im_media_panel", {
+            "peer_id": peer_id, "type": type, "tabs": MEDIA_TABS, "items": items, "next_from": next_from,
+            "part": "page" if start_from else "tab" if tab else "panel", "start": start_from, "tz": tz, "now": time.time(), "page": "im"})
 
     @router.post("/im/{peer_id}/read")
     def mark_read(peer_id: int):
@@ -167,7 +261,7 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
         return {"peer_id": peer_id, "mode": bot_mode(peer_id, access, rt, vk().me_id),
                 "c": chat_controls(peer_id, access, rt, vk().me_id),
                 "members": members, "personas": list_personas(settings.personas_dir),
-                "active": rt.active_persona, "page": "im"}
+                "active": rt.active_persona, "mark_read": rt.mark_read, "page": "im"}
 
     def bot_panel(request: Request, peer_id: int, toast: str | None = None):
         if not is_hx(request):

@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from tests.web.im_fixtures import HISTORY, CONVERSATIONS, ME, PEER_CHAT, PEER_USER
 from web.im.views import (Attachment, BotMark, Message, Peer, Profiles, attachment_of, day_label, parse_conversations,
-                          parse_history, parse_photos, presence, preview, rows, wave_bars)
+                          parse_history, parse_media, parse_search, presence, preview, rows, wave_bars)
 
 TZ = ZoneInfo("Europe/Moscow")
 
@@ -122,13 +122,26 @@ def test_preview_counts_photos_and_names_new_kinds():
     assert preview(Message(1, 0, 11, "Вася", "", "", False, False, attachments=(gift,))) == "Подарок"
 
 
-def test_parse_photos_takes_tiles_and_cursor():
+def test_parse_media_takes_tiles_and_cursor():
     raw = {"items": [{"attachment": {"type": "photo", "photo": {"sizes": [
         {"url": "https://t", "width": 320}, {"url": "https://f", "width": 1280}]}}},
         {"attachment": {"type": "video", "video": {}}}], "next_from": "n"}
-    photos, cursor = parse_photos(raw)
+    photos, cursor = parse_media(raw, "photo")
     assert [(p.url, p.preview) for p in photos] == [("https://f", "https://t")] and cursor == "n"
-    assert parse_photos({"items": [], "next_from": "n"}) == ([], "")
+    assert parse_media({"items": [], "next_from": "n"}, "photo") == ([], "")
+    videos, _ = parse_media(raw, "video")
+    assert [v.kind for v in videos] == ["video"]
+
+
+def test_search_results_become_dialogs_without_a_last_message():
+    raw = {"count": 1, "items": [CONVERSATIONS["items"][1]["conversation"]], "profiles": CONVERSATIONS["profiles"]}
+    (found,) = parse_search(raw, ME)
+    assert found.peer.title == "Аня Иванова" and found.last is None
+
+
+def test_avatars_prefer_the_sharper_photo_100():
+    profiles = Profiles({"profiles": [{"id": 1, "photo_50": "small", "photo_100": "big"}, {"id": 2, "photo_50": "only"}]})
+    assert profiles.photo(1) == "big" and profiles.photo(2) == "only"
 
 
 def test_preview_prefers_text_then_attachment_label():

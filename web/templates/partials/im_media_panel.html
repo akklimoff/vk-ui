@@ -1,0 +1,30 @@
+{% from "partials/im_icons.html" import icon %}
+{% from "partials/im_media.html" import card %}
+{# part: panel — панель целиком, tab — содержимое вкладки, page — следующая страница: плитки и сентинел #}
+{% macro media_page() %}
+  {% for a in items %}
+    {% if type == 'photo' %}<a class="tile" href="{{ a.url }}" data-full="{{ a.url }}" target="_blank" rel="noopener" @click.prevent="view($el)"><img src="{{ a.preview }}" alt="фото" loading="lazy"></a>
+    {% elif type == 'video' %}{% set tag = 'a' if a.href else 'div' %}<{{ tag }} class="tile video-tile"{% if a.href %} href="{{ a.href }}" target="_blank" rel="noopener"{% endif %} title="{{ a.title }}">{% if a.preview %}<img src="{{ a.preview }}" alt="" loading="lazy">{% endif %}{% if a.duration %}<span class="dur">{{ a.duration|mmss }}</span>{% endif %}</{{ tag }}>
+    {% elif type == 'audio_message' %}{% set wid = 'mv' ~ (start or '0')|replace('/', '_')|replace(':', '_') ~ '-' ~ loop.index %}{% include "partials/im_voice.html" %}
+    {% else %}{{ card(a) }}{% endif %}
+  {% endfor %}
+  {% if next_from %}<div class="im-more" hx-get="/im/{{ peer_id }}/media?type={{ type }}&start_from={{ next_from|urlencode }}" hx-trigger="intersect once" hx-target="this" hx-swap="outerHTML"></div>{% endif %}
+{% endmacro %}
+{% macro tab_body() %}
+  {% if not items %}<div class="im-empty">{{ icon('picture_outline_24') }}<span>Здесь пока пусто</span></div>{% endif %}
+  <div class="im-media-items {{ type }}"{% if type == 'photo' %} data-gallery{% endif %}>{{ media_page() }}</div>
+{% endmacro %}
+{% if part == 'page' %}{{ media_page() }}
+{% elif part == 'tab' %}{{ tab_body() }}
+{% else %}<div class="im-bot im-media-panel" x-data="{ tab: '{{ type }}' }">
+  <header class="im-bot-head">
+    <span class="ava a32 robot">{{ icon('picture_outline_24') }}</span>
+    <span class="body"><span class="line"><b>Вложения</b></span><small>из этого чата, сначала новые</small></span>
+    <button type="button" class="ib" @click="panel = null" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
+  </header>
+  <nav class="im-tabs" aria-label="Вид вложений">{% for key, title in tabs.items() %}
+    <button type="button" :class="{ on: tab === '{{ key }}' }" @click="tab = '{{ key }}'"
+            hx-get="/im/{{ peer_id }}/media?type={{ key }}&tab=1" hx-target="next .im-media-body" hx-swap="innerHTML" hx-sync="closest nav:replace">{{ title }}</button>{% endfor %}
+  </nav>
+  <div class="im-media-body">{{ tab_body() }}</div>
+</div>{% endif %}

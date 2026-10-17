@@ -1,11 +1,4 @@
 {% from "partials/im_icons.html" import icon %}
-{# только <li>, вставляется в #dialog-list #}
-{% for d, mode in dialogs %}<li class="dlg{{ ' pinned-last' if d.pinned and not (loop.nextitem and loop.nextitem[0].pinned) }}" data-title="{{ d.peer.title|lower }}" data-unread="{{ d.unread }}"
-    x-show="matches($el)" :class="{ active: sel === {{ d.peer.id }} }">
-  <a hx-get="/im/{{ d.peer.id }}" hx-target="#chat" hx-swap="innerHTML" href="/im?sel={{ d.peer.id }}" @click="open({{ d.peer.id }})">
-    <span class="ava a48">{% if d.peer.photo %}<img src="{{ d.peer.photo }}" alt="">{% else %}<i>{{ d.peer.title[:1] }}</i>{% endif %}{% if d.peer.online %}<b class="dot"></b>{% endif %}</span>
-    <span class="dlg-head"><span class="title">{{ d.peer.title }}</span>{% if d.muted %}{{ icon('mute_cross_16', 'mute') }}{% endif %}{% with m = mode %}{% include "partials/im_badge.html" %}{% endwith %}</span>
-    <span class="dlg-msg">{% if d.last %}<span class="who">{% if d.last.out %}Вы{% else %}{{ d.last.author.split(' ')[0] }}{% endif %}:</span> {% if d.last.text or d.last.action %}{{ d.last|preview }}{% else %}<span class="att">{{ d.last|preview }}</span>{% endif %}<span class="when"> · {{ d.last.ts|since(now, tz) }}</span>{% endif %}</span>
-    <span class="dlg-icons">{% if d.unread %}<span class="unread{{ ' quiet' if d.muted }}">{{ d.unread if d.unread < 100 else '99+' }}</span>{% elif d.last and d.last.out %}{{ icon('check_double_outline_16' if d.last.read else 'check_outline_16', 'ticks') }}{% endif %}{% if d.pinned %}{{ icon('pin_16') }}{% endif %}</span>
-  </a>
-</li>{% endfor %}
+{# только <li>, вставляется в #dialog-list; more — сколько уже загружено, если VK отдаст ещё #}
+{% for d, mode in dialogs %}{% set last_pinned = d.pinned and not (loop.nextitem and loop.nextitem[0].pinned) %}{% include "partials/im_dialog.html" %}{% endfor %}
+{% if more %}<li class="dlg-more" hx-get="/im/dialogs/more?offset={{ more }}" hx-trigger="intersect once" hx-target="this" hx-swap="outerHTML"></li>{% endif %}

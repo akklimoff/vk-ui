@@ -15,8 +15,12 @@
     <label class="switch-row"><span>Пауза в этом чате<small>на обращение здесь агент не откликается, пока пауза не снята</small></span><input type="checkbox" role="switch" class="sw" name="on" value="1" {{ 'checked' if c.paused }}></label>
   </form>
   {% else %}<p class="muted">В личных диалогах агент не работает: он откликается на обращение только в доверенных беседах и в «Избранном».</p>{% endif %}
-  <label class="switch-row" x-data="readMark"><span>Читать без отметки<small>VK не увидит, что сообщения прочитаны; во всех чатах этого браузера</small></span>
-    <input type="checkbox" role="switch" class="sw" :checked="silent" @change="toggle($event.target.checked)"></label>
+  <form hx-post="/im/read-marks" hx-trigger="change" hx-swap="none">
+    <label class="switch-row"><span>Читать без отметки<small>открытые чаты не отмечаются прочитанными: VK и собеседник этого не увидят; во всех чатах и на всех устройствах</small></span>
+      <input type="hidden" name="on" x-ref="markOn" :value="markRead ? '1' : ''">
+      <input type="checkbox" role="switch" class="sw" :checked="!markRead"
+             @change="markRead = !$event.target.checked; $refs.markOn.value = markRead ? '1' : ''"></label>
+  </form>
   {% if c.chat or c.saved %}<h4>Персоны <small>пусто — активная «{{ active or 'по умолчанию' }}»; несколько — случайная на каждую просьбу</small></h4>
   <form class="persona-list" hx-post="/im/{{ peer_id }}/bot/personas" hx-target="#bot-panel" hx-swap="outerHTML" hx-trigger="change">
     {% for p in personas %}<label class="chip-p"><input type="checkbox" name="slug" value="{{ p.slug }}" {{ 'checked' if p.slug in c.personas }} hidden><span>{{ p.name }}</span></label>{% endfor %}

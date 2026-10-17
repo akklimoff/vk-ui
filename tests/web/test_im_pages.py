@@ -39,6 +39,14 @@ class FakeVk:
     def delete_message(self, message_id):
         self.calls.append(("delete", message_id))
 
+    def upload_photos(self, peer_id, photos):
+        self.calls.append(("photos", peer_id, [ext for _, ext in photos]))
+        return [f"photo1_{i}_key" for i, _ in enumerate(photos)]
+
+    def search_conversations(self, query, count):
+        self.calls.append(("search", query, count))
+        return {"count": 1, "items": [CONVERSATIONS["items"][1]["conversation"]], "profiles": CONVERSATIONS["profiles"]}
+
     def upload_voice(self, peer_id, data, ext):
         self.calls.append(("voice", peer_id, len(data), ext))
         return "audio_message1_8_abc"
@@ -319,21 +327,26 @@ def test_forwarded_messages_and_reposts_render_inline(client):
     assert ">репост<" not in article and "пересланных<" not in article
 
 
-def test_photos_panel_lists_chat_photos_and_pages_on(client):
+def test_media_panel_has_tabs_and_pages_on(client):
     raw = {"items": [{"message_id": 9, "attachment": {"type": "photo", "photo": {"sizes": [
         {"url": "https://cdn.example/t.jpg", "width": 320, "height": 240},
         {"url": "https://cdn.example/full.jpg", "width": 1280, "height": 960}]}}}], "next_from": "9/1"}
     client.app.state.vk = FakeVk("t")
-    client.app.state.vk.history_photos = lambda peer_id, count, start_from="": (
-        client.app.state.vk.calls.append(("photos", peer_id, start_from)) or raw)
-    r = client.get(f"/im/{PEER_CHAT}/photos", auth=AUTH, headers={"HX-Request": "true"})
-    assert r.status_code == 200 and 'class="im-photos" data-gallery' in r.text
+    client.app.state.vk.history_media = lambda peer_id, media_type, count, start_from="": (
+        client.app.state.vk.calls.append(("media", peer_id, media_type, start_from)) or raw)
+    hx = {"HX-Request": "true"}
+    r = client.get(f"/im/{PEER_CHAT}/media", auth=AUTH, headers=hx)
+    assert r.status_code == 200 and 'class="im-media-items photo" data-gallery' in r.text
     assert 'data-full="https://cdn.example/full.jpg"' in r.text and 'src="https://cdn.example/t.jpg"' in r.text
-    assert f'hx-get="/im/{PEER_CHAT}/photos?start_from=9/1"' in r.text
-    more = client.get(f"/im/{PEER_CHAT}/photos?start_from=9/1", auth=AUTH, headers={"HX-Request": "true"})
-    assert "im-photos-panel" not in more.text and 'class="tile"' in more.text
-    assert client.app.state.vk.calls[-1] == ("photos", PEER_CHAT, "9/1")
-    assert client.get(f"/im/{PEER_CHAT}/photos", auth=AUTH).status_code == 303
+    assert f'hx-get="/im/{PEER_CHAT}/media?type=photo&start_from=9/1"' in r.text
+    assert r.text.count('class="im-tabs"') == 1 and ">Голосовые<" in r.text
+    more = client.get(f"/im/{PEER_CHAT}/media?start_from=9/1", auth=AUTH, headers=hx)
+    assert "im-media-panel" not in more.text and "im-media-items" not in more.text and 'class="tile"' in more.text
+    assert client.app.state.vk.calls[-1] == ("media", PEER_CHAT, "photo", "9/1")
+    tab = client.get(f"/im/{PEER_CHAT}/media?type=doc&tab=1", auth=AUTH, headers=hx)
+    assert "im-tabs" not in tab.text and 'class="im-media-items doc"' in tab.text
+    assert client.get(f"/im/{PEER_CHAT}/media?type=wall", auth=AUTH, headers=hx).status_code == 404
+    assert client.get(f"/im/{PEER_CHAT}/media", auth=AUTH).status_code == 303
 
 
 def test_icon_sprite_url_carries_its_version(client):
@@ -344,8 +357,8 @@ def test_icon_sprite_url_carries_its_version(client):
 
 def test_chat_header_toggles_photos_and_bot_panels(client):
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
-    assert f'hx-get="/im/{PEER_CHAT}/photos" hx-target="#photos-slot"' in r.text
-    assert "x-show=\"panel === 'photos'\"" in r.text and "x-show=\"panel === 'bot'\"" in r.text
+    assert f'hx-get="/im/{PEER_CHAT}/media" hx-target="#media-slot"' in r.text
+    assert "x-show=\"panel === 'media'\"" in r.text and "x-show=\"panel === 'bot'\"" in r.text
 
 
 def test_voice_player_renders_wave_bars_and_transcript_toggle(client):
@@ -371,3 +384,113 @@ def test_composer_has_no_draft_button_and_the_route_is_gone(client):
     page = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH).text
     assert "Черновик от бота" not in page and "/draft" not in page
     assert client.post(f"/im/{PEER_CHAT}/draft", auth=AUTH).status_code in (404, 405)
+
+
+JPEG = b"\xff\xd8\xff\xe0" + b"0" * 16
+
+
+def test_photos_go_out_with_the_text_in_one_message(client):
+    r = client.post(f"/im/{PEER_CHAT}/send", auth=AUTH, headers={"HX-Request": "true"}, data={"text": "смотри"},
+                    files=[("photos", ("a.jpg", JPEG, "image/jpeg")), ("photos", ("b.png", b"\x89PNG\r\n\x1a\n0", "image/png"))])
+    assert r.status_code == 200
+    calls = client.app.state.vk.calls
+    assert ("photos", PEER_CHAT, ["jpg", "png"]) in calls
+    assert ("send", PEER_CHAT, "смотри", None, "photo1_0_key,photo1_1_key") in calls
+
+
+def test_a_non_picture_is_refused_before_anything_is_sent(client):
+    r = client.post(f"/im/{PEER_CHAT}/send", auth=AUTH, headers={"HX-Request": "true"}, data={"text": ""},
+                    files=[("photos", ("x.jpg", b"%PDF-1.7", "image/jpeg"))])
+    assert r.status_code == 422 and "JPEG" in r.text
+    vk = client.app.state.vk
+    assert vk is None or not [c for c in vk.calls if c[0] in ("send", "photos")]
+
+
+def test_unchanged_dialog_list_answers_204(client):
+    hx = {"HX-Request": "true"}
+    first = client.get("/im/dialogs?count=2", auth=AUTH, headers=hx)
+    version = first.headers["X-Dialogs-Version"]
+    again = client.get(f"/im/dialogs?count=2&v={version}", auth=AUTH, headers=hx)
+    assert again.status_code == 204
+    assert ("conversations", 2, 0) in client.app.state.vk.calls
+    assert client.get("/im/dialogs?count=5000", auth=AUTH, headers=hx).status_code == 200
+    assert ("conversations", 200, 0) in client.app.state.vk.calls
+
+
+def test_more_dialogs_page_on_while_vk_has_them(client):
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.conversations = lambda count=60, offset=0: {**CONVERSATIONS, "count": 150}
+    r = client.get("/im/dialogs", auth=AUTH, headers={"HX-Request": "true"})
+    assert 'hx-get="/im/dialogs/more?offset=2"' in r.text
+    sentinel = r.text.split('class="dlg-more"')[1].split(">")[0]
+    assert 'hx-target="this"' in sentinel and 'hx-swap="outerHTML"' in sentinel
+    client.app.state.vk.conversations = lambda count=60, offset=0: {**CONVERSATIONS, "count": 4}
+    more = client.get("/im/dialogs/more?offset=2", auth=AUTH, headers={"HX-Request": "true"})
+    assert "dlg-more" not in more.text and "лампочки" in more.text
+
+
+def test_search_reaches_chats_beyond_the_loaded_list(client):
+    r = client.get("/im/dialogs/search?q=аня", auth=AUTH, headers={"HX-Request": "true"})
+    assert "Аня Иванова" in r.text and 'data-peer="22"' in r.text and 'x-show="true"' in r.text
+    assert ("search", "аня", 20) in client.app.state.vk.calls
+    empty = client.get("/im/dialogs/search?q=", auth=AUTH, headers={"HX-Request": "true"})
+    assert empty.status_code == 200 and "data-peer" not in empty.text
+
+
+def test_read_marks_switch_lives_in_runtime_json(client, settings):
+    hx = {"HX-Request": "true"}
+    assert 'im(null, true)' in client.get("/im", auth=AUTH).text
+    r = client.post("/im/read-marks", auth=AUTH, headers=hx, data={})
+    assert r.status_code == 204 and "не отмечаются" in json.loads(r.headers["HX-Trigger"])["toast"]
+    assert json.load(open(settings.runtime_file))["mark_read"] is False
+    assert 'im(null, false)' in client.get("/im", auth=AUTH).text
+    client.post("/im/read-marks", auth=AUTH, headers=hx, data={"on": "1"})
+    assert json.load(open(settings.runtime_file))["mark_read"] is True
+
+
+def test_chat_offers_manual_read_and_knows_its_unread(client):
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    assert f'chat({PEER_CHAT}, 501, 2)' in r.text and 'x-show="!markRead && unread"' in r.text
+
+
+def test_a_refused_send_gives_the_composer_back(client):
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    assert "sent($event.detail.successful && $event.detail.xhr.status < 300)" in r.text
+
+
+def test_hovered_chat_opens_from_the_warmed_history(client):
+    client.post(f"/im/{PEER_CHAT}/warm", auth=AUTH, headers={"HX-Request": "true"})
+    client.get(f"/im/{PEER_CHAT}", auth=AUTH, headers={"HX-Request": "true"})
+    client.get(f"/im/{PEER_CHAT}", auth=AUTH, headers={"HX-Request": "true"})
+    fetched = [c for c in client.app.state.vk.calls if c[0] == "history"]
+    assert len(fetched) == 2          # прогрев и второе открытие; первое открытие взяло прогретое
+
+
+def test_more_dialogs_stop_at_the_cap(client):
+    hx = {"HX-Request": "true"}
+    client.get("/im/dialogs/more?offset=180", auth=AUTH, headers=hx)
+    assert ("conversations", 20, 180) in client.app.state.vk.calls
+    r = client.get("/im/dialogs/more?offset=200", auth=AUTH, headers=hx)
+    assert r.status_code == 200 and "dlg" not in r.text
+    assert not [c for c in client.app.state.vk.calls if c[0] == "conversations" and c[2] == 200]
+
+
+def test_warmed_history_is_dropped_once_the_bot_saw_new_messages(client, settings):
+    import os
+    hx = {"HX-Request": "true"}
+    inbox = f"{settings.state_dir}/inbox.json"
+    os.makedirs(settings.state_dir, exist_ok=True)
+    open(inbox, "w").write('{"at": 1}')
+    client.post(f"/im/{PEER_CHAT}/warm", auth=AUTH, headers=hx)
+    os.utime(inbox, ns=(os.stat(inbox).st_mtime_ns + 10**9,) * 2)
+    client.get(f"/im/{PEER_CHAT}", auth=AUTH, headers=hx)
+    assert len([c for c in client.app.state.vk.calls if c[0] == "history"]) == 2
+
+
+def test_voice_with_photos_is_refused_before_any_upload(client):
+    r = client.post(f"/im/{PEER_CHAT}/send", auth=AUTH, headers={"HX-Request": "true"},
+                    files=[("voice", ("hello.ogg", b"OggS" + b"\0" * 100, "audio/ogg")),
+                           ("photos", ("a.jpg", JPEG, "image/jpeg"))])
+    assert r.status_code == 422 and "без фото" in r.text
+    vk = client.app.state.vk
+    assert vk is None or not [c for c in vk.calls if c[0] in ("photos", "voice", "send")]

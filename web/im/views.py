@@ -168,7 +168,9 @@ class Profiles:
         return f"club{-uid}" if uid < 0 else f"id{uid}"
 
     def photo(self, uid: int) -> str:
-        return (self._users.get(uid) or self._groups.get(uid) or {}).get("photo_50", "")
+        """photo_100: аватар рисуется 48 пикселями, и на ретине photo_50 мылит."""
+        found = self._users.get(uid) or self._groups.get(uid) or {}
+        return found.get("photo_100") or found.get("photo_50", "")
 
     def online(self, uid: int) -> bool:
         return bool((self._users.get(uid) or {}).get("online"))
@@ -327,15 +329,17 @@ def parse_attachment(att: dict, profiles: "Profiles") -> Attachment:
     return Attachment("other", title=ATTACHMENT_LABELS.get(kind, "[вложение]").strip("[]").capitalize())
 
 
-def parse_photos(raw: dict) -> tuple[list[Attachment], str]:
-    photos, items = [], raw.get("items") or []
+def parse_media(raw: dict, media_type: str) -> tuple[list[Attachment], str]:
+    """Вложения чата одного вида из messages.getHistoryAttachments, у фото — превью размером с плитку."""
+    profiles, found, items = Profiles(raw), [], raw.get("items") or []
     for item in items:
         att = item.get("attachment") or {}
-        if att.get("type") == "photo":
-            photo = photo_of(att.get("photo") or {}, PHOTO_TILE)
-            if photo.url:
-                photos.append(photo)
-    return photos, (raw.get("next_from") or "") if items else ""
+        if att.get("type") != media_type:
+            continue
+        media = photo_of(att.get("photo") or {}, PHOTO_TILE) if media_type == "photo" else attachment_of(att, profiles)
+        if media.kind != "photo" or media.url:
+            found.append(media)
+    return found, (raw.get("next_from") or "") if items else ""
 
 
 def action_text(action: dict | None, profiles: Profiles, from_id: int) -> str:
@@ -419,7 +423,7 @@ def peer_of(conv: dict, profiles: Profiles) -> Peer:
     if peer.get("type") == "chat":
         cs = conv.get("chat_settings") or {}
         return Peer(pid, cs.get("title") or f"беседа {peer.get('local_id', pid)}",
-                    (cs.get("photo") or {}).get("photo_50", ""), "chat", False, int(cs.get("members_count", 0)))
+                    (cs.get("photo") or {}).get("photo_100") or (cs.get("photo") or {}).get("photo_50", ""), "chat", False, int(cs.get("members_count", 0)))
     if pid < 0:
         return Peer(pid, profiles.name(pid), profiles.photo(pid), "group")
     return Peer(pid, profiles.name(pid), profiles.photo(pid), "user", profiles.online(pid),
@@ -440,6 +444,11 @@ def parse_conversations(raw: dict, me_id: int, marks: dict | None = None) -> lis
             pinned=bool((conv.get("sort_id") or {}).get("major_id")),
         ))
     return dialogs
+
+
+def parse_search(raw: dict, me_id: int) -> list[Dialog]:
+    """messages.searchConversations отдаёт беседы без последнего сообщения — оборачиваем их как у getConversations."""
+    return parse_conversations({**raw, "items": [{"conversation": c} for c in raw.get("items") or []]}, me_id)
 
 
 def parse_history(raw: dict, me_id: int, marks: dict | None = None) -> tuple[list[Message], int]:

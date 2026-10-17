@@ -1,7 +1,7 @@
 {% from "partials/im_icons.html" import icon %}
 {# ожидает chat: dict из chat_ctx #}
 {% set c = chat %}
-<div class="im-chat" x-data="chat({{ c.peer_id }}, {{ c.out_read }})" :class="{ 'with-panel': panel }">
+<div class="im-chat" x-data="chat({{ c.peer_id }}, {{ c.out_read }}, {{ c.unread }})" :class="{ 'with-panel': panel }">
   <div class="im-convo">
     <header class="im-chat-head">
       <button type="button" class="ib close" @click="$dispatch('im-close')" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
@@ -11,10 +11,12 @@
         <span class="line"><b>{{ c.peer.title if c.peer else c.peer_id|peer_label }}</b><span id="chat-badge">{% with m = c.mode %}{% include "partials/im_badge.html" %}{% endwith %}</span></span>
         <small>{% if c.peer and c.peer.kind == 'chat' %}{{ c.peer.members|plural('участник', 'участника', 'участников') }}{% elif c.peer and c.peer.kind == 'group' %}сообщество{% elif c.peer %}{{ c.peer|presence(c.now, c.tz) }}{% endif %}</small>
       </span>
+      <button type="button" class="ib read-now" x-show="!markRead && unread" x-cloak @click="readNow()"
+              title="Отметить прочитанным" aria-label="Отметить прочитанным">{{ icon('check_double_outline_16') }}</button>
       <a class="ib" href="{{ c.peer_id|peer_link }}" title="Открыть в VK" aria-label="Открыть в VK" target="_blank" rel="noopener">{{ icon('logo_vk_outline_24') }}</a>
-      <button type="button" class="ib" title="Фотографии чата" aria-label="Фотографии чата" :class="{ on: panel === 'photos' }"
-              @click="panel = panel === 'photos' ? null : 'photos'"
-              hx-get="/im/{{ c.peer_id }}/photos" hx-target="#photos-slot" hx-swap="innerHTML" hx-trigger="click once">{{ icon('picture_outline_24') }}</button>
+      <button type="button" class="ib" title="Вложения чата" aria-label="Вложения чата" :class="{ on: panel === 'media' }"
+              @click="panel = panel === 'media' ? null : 'media'"
+              hx-get="/im/{{ c.peer_id }}/media" hx-target="#media-slot" hx-swap="innerHTML" hx-trigger="click once">{{ icon('picture_outline_24') }}</button>
       <button type="button" class="ib" title="Агент в этом чате" aria-label="Агент в этом чате" :class="{ on: panel === 'bot' }"
               @click="panel = panel === 'bot' ? null : 'bot'"
               hx-get="/im/{{ c.peer_id }}/bot" hx-target="#bot-slot" hx-swap="innerHTML" hx-trigger="click once">{{ icon('robot_outline_24') }}</button>
@@ -30,18 +32,26 @@
     <form class="im-composer" x-data="composer()" method="post" action="/im/{{ c.peer_id }}/send" enctype="multipart/form-data"
           hx-post="/im/{{ c.peer_id }}/send" hx-target="#messages" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]"
           hx-vals='js:{...lastRendered()}'
-          @htmx:after-request="if ($event.detail.elt === $el && $event.detail.xhr.status < 300) reset()" @im-reply.window="quote($event.detail)">
+          @htmx:before-send="if ($event.detail.elt === $el) sending()"
+          @htmx:after-request="if ($event.detail.elt === $el) sent($event.detail.successful && $event.detail.xhr.status < 300)" @im-reply.window="quote($event.detail)"
+          @dragover.prevent @drop.prevent="addPhotos($event.dataTransfer.files)">
       <div class="box">
         <div class="quote-bar" x-show="reply" x-cloak>{{ icon('reply_24') }}<span class="bar"></span>
           <span class="body"><b x-text="reply?.author"></b><span x-text="reply?.text"></span></span>
           <button type="button" class="ib" @click="reply = null" aria-label="Убрать цитату">{{ icon('cancel_20') }}</button></div>
+        <div class="photo-strip" x-show="photos.length" x-cloak>
+          <template x-for="(p, i) in photos" :key="p.url">
+            <span class="thumb"><img :src="p.url" alt=""><button type="button" @click="dropPhoto(i)" aria-label="Убрать фото">{{ icon('cancel_16') }}</button></span>
+          </template>
+        </div>
         <div class="file-chip" x-show="file" x-cloak>{{ icon('document_outline_24') }}<span x-text="file?.name"></span><span class="muted" x-text="size"></span>
           <button type="button" class="ib" @click="clearFile()" aria-label="Убрать файл">{{ icon('cancel_20') }}</button></div>
         <small id="composer-error" class="im-composer-error"></small>
         <input type="hidden" name="reply_to" :value="reply?.id || ''">
         <div class="row-input">
+          <label class="ib attach" title="Фото: выбрать, перетащить или вставить из буфера"><input type="file" name="photos" accept="image/jpeg,image/png,image/gif,image/webp" multiple x-ref="p" @change="addPhotos($event.target.files)" hidden>{{ icon('picture_outline_24') }}</label>
           <label class="ib attach" title="Голосовое из .ogg/.mp3"><input type="file" name="voice" accept=".ogg,.mp3,audio/ogg,audio/mpeg" x-ref="f" @change="pick()" hidden>{{ icon('add_circle_outline_24') }}</label>
-          <textarea name="text" rows="1" placeholder="Сообщение" x-ref="t" x-model="text" @input="grow()"
+          <textarea name="text" rows="1" placeholder="Сообщение" x-ref="t" x-model="text" @input="grow()" @paste="paste($event)"
                     @keydown.enter="if (!$event.shiftKey && !$event.isComposing) { $event.preventDefault(); if (ready) $el.form.requestSubmit() }" @keydown.escape="reply = null"></textarea>
           <button type="submit" class="ib send" :class="{ ready }" @click="if (!ready) $event.preventDefault()" aria-label="Отправить">{{ icon('send_24') }}</button>
         </div>
@@ -49,7 +59,7 @@
     </form>
   </div>
   <div id="bot-slot" class="im-bot-slot" x-show="panel === 'bot'" x-cloak></div>
-  <div id="photos-slot" class="im-bot-slot" x-show="panel === 'photos'" x-cloak></div>
+  <div id="media-slot" class="im-bot-slot" x-show="panel === 'media'" x-cloak></div>
   <div class="im-viewer" x-show="viewer" x-cloak @click.self="swiped ? swiped = false : viewer = null" @keydown.escape.window="viewer = null"
        @keydown.arrow-left.window="typing($event) || step(-1)" @keydown.arrow-right.window="typing($event) || step(1)"
        @pointerdown="swipeFrom = $event.clientX; swiped = false" @pointerup="swipe($event.clientX)">
@@ -64,6 +74,7 @@
   </div>
   <div id="chat-state" data-out-read="{{ c.out_read }}" hidden></div>
   <div id="chat-poll" hx-get="/im/{{ c.peer_id }}/messages"
-       hx-trigger="every 3s [document.visibilityState === 'visible']" hx-target="#messages" hx-swap="beforeend"
+       hx-trigger="poke, every 3s [document.visibilityState === 'visible' && !imLive()], every 15s [document.visibilityState === 'visible']"
+       hx-target="#messages" hx-swap="beforeend" hx-sync="this:queue last"
        hx-vals='js:{...lastRendered()}'></div>
 </div>

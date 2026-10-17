@@ -1,16 +1,37 @@
 {% from "partials/im_icons.html" import icon %}
-<div class="im" x-data="im({{ sel or 'null' }})" :class="{ 'show-chat': pane === 'chat' }" @keydown.window="hotkey($event)">
+<div class="im" x-data="im({{ sel or 'null' }}, {{ 'true' if mark_read else 'false' }})" :class="{ 'show-chat': pane === 'chat' }" @keydown.window="hotkey($event)">
   <aside class="im-side">
     <header class="im-side-head">Мессенджер</header>
-    <label class="im-search">{{ icon('search_outline_16') }}<input type="search" placeholder="Поиск" x-model="filter" x-ref="search" aria-label="Поиск по диалогам"></label>
+    <label class="im-search">{{ icon('search_outline_16') }}<input type="search" name="q" placeholder="Поиск" x-model="filter" x-ref="search" aria-label="Поиск по диалогам"
+      hx-get="/im/dialogs/search" hx-trigger="input changed delay:300ms, search" hx-target="#search-results" hx-swap="innerHTML" hx-sync="this:replace"></label>
     <div id="dialogs" class="im-dialogs">
-      <ul id="dialog-list" hx-get="/im/dialogs" hx-trigger="every 10s [document.visibilityState === 'visible']"
-          hx-target="#dialog-list" hx-swap="innerHTML">{% include "partials/im_dialogs.html" %}</ul>
+      <ul id="dialog-list" hx-get="/im/dialogs"
+          hx-trigger="poke, every 60s [document.visibilityState === 'visible'], every 10s [document.visibilityState === 'visible' && !imLive()]"
+          hx-vals='js:{...dialogsState()}' hx-target="#dialog-list" hx-swap="innerHTML" hx-sync="this:queue last" hx-disinherit="*">{% include "partials/im_dialogs.html" %}</ul>
+      <div class="im-search-results" x-show="filter.trim()" x-cloak>
+        <h5>Поиск по всем чатам</h5>
+        <ul id="search-results"></ul>
+      </div>
     </div>
     <label class="im-side-foot">{{ icon('message_outline_20') }}<span>Только непрочитанные</span><input type="checkbox" role="switch" class="sw" x-model="unreadOnly"></label>
+    <form class="im-side-foot" hx-post="/im/read-marks" hx-trigger="change" hx-swap="none"
+          @htmx:after-request="if (!$event.detail.successful || $event.detail.xhr.status >= 300) markRead = !markRead">
+      <label title="Открытый чат не отмечается прочитанным: VK и собеседник не увидят, что вы его читали">{{ icon('check_double_outline_16') }}<span>Отмечать прочитанным</span>
+        <input type="checkbox" role="switch" class="sw" name="on" value="1" :checked="markRead" @change="markRead = $event.target.checked"></label>
+    </form>
   </aside>
-  <section id="chat" class="im-main">
-    {% if chat %}{% include "partials/im_chat.html" %}{% else %}{% include "partials/im_empty.html" %}{% endif %}
+  <section class="im-main" :class="{ loading }" @touchstart.passive="edgeFrom($event)" @touchend="edgeTo($event)">
+    <div id="chat" class="im-chat-slot">{% if chat %}{% include "partials/im_chat.html" %}{% else %}{% include "partials/im_empty.html" %}{% endif %}</div>
+    <div class="im-skeleton" x-show="loading" x-cloak aria-hidden="true">
+      <div class="head"><i class="ava a32"></i><i class="bar" style="width: 30%"></i></div>
+      <div class="rows">{% for w in (55, 30, 70, 45, 25, 60) %}<div class="row"><i class="ava a36"></i><span><i class="bar short"></i><i class="bar" style="width: {{ w }}%"></i></span></div>{% endfor %}</div>
+    </div>
   </section>
   <template id="im-empty">{% include "partials/im_empty.html" %}</template>
+  <dialog class="im-confirm" x-ref="confirm" @close="answer($el.returnValue === 'yes')">
+    <form method="dialog">
+      <p x-text="question"></p>
+      <menu><button value="no" class="ghost">Отмена</button><button value="yes" class="vk-btn danger">Удалить</button></menu>
+    </form>
+  </dialog>
 </div>
