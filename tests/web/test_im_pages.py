@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -242,7 +243,7 @@ def test_im_page_wears_the_vk_shell(client):
     assert 'class="page-im"' in r.text
     nav = r.text.split('class="vk-nav"')[1].split("</nav>")[0]
     assert 'aria-current="page"' in nav.split("Мессенджер")[0]
-    assert "vk-icons.svg#message_outline_20" in nav and "vk-icons.svg#robot_outline_20" in nav
+    assert '#message_outline_20"' in nav and '#robot_outline_20"' in nav
     assert 'class="topnav"' not in r.text
 
 
@@ -254,9 +255,9 @@ def test_other_pages_keep_the_plain_nav(client):
 def test_dialog_rows_show_mute_icon_ticks_and_short_age(client):
     r = client.get("/im/dialogs", auth=AUTH, headers={"HX-Request": "true"})
     chat, user = r.text.split("<li")[1:]
-    assert "vk-icons.svg#mute_cross_16" in chat and "vk-icons.svg#pin_16" in chat
+    assert '#mute_cross_16"' in chat and '#pin_16"' in chat
     assert 'class="att">Стикер' in chat and "Вася:" in chat
-    assert "vk-icons.svg#check_outline_16" in user and "Вы:" in user     # своё, непрочитанное — одна галочка
+    assert '#check_outline_16"' in user and "Вы:" in user     # своё, непрочитанное — одна галочка
     assert '<span class="when"> · ' in user and "pinned-last" in chat and "pinned-last" not in user
 
 
@@ -277,16 +278,16 @@ def test_chat_header_shows_presence_for_users(client):
     client.app.state.vk.history_page = lambda *a, **k: {**HISTORY, "conversations": [CONVERSATIONS["items"][1]["conversation"]]}
     r = client.get(f"/im?sel={PEER_USER}", auth=AUTH)
     assert "была в сети 3 июля" in r.text and "в 09:15" in r.text
-    assert "vk-icons.svg#cancel_24" in r.text and "vk-icons.svg#chevron_left_24" in r.text
+    assert '#cancel_24"' in r.text and '#chevron_left_24"' in r.text
 
 
 def test_only_own_messages_get_a_delete_button(client):
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
     own = r.text.split('data-id="501"')[1].split("</article>")[0]
     other = r.text.split('data-id="500"')[1].split("</article>")[0]
-    assert "/messages/501/delete" in own and "vk-icons.svg#delete_outline_24" in own
-    assert "delete" not in other and "vk-icons.svg#reply_24" in other
-    assert 'class="info"' in own and "vk-icons.svg#check_double_outline_16" in own
+    assert "/messages/501/delete" in own and '#delete_outline_24"' in own
+    assert "delete" not in other and '#reply_24"' in other
+    assert 'class="info"' in own and '#check_double_outline_16"' in own
 
 
 def test_photo_opens_in_viewer(client):
@@ -296,8 +297,55 @@ def test_photo_opens_in_viewer(client):
     client.app.state.vk = FakeVk("t")
     client.app.state.vk.history_page = lambda *a, **k: {**HISTORY, "items": [photo] + HISTORY["items"]}
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
-    assert """@click.prevent='viewer = "https://cdn.example/p_w.jpg"'""" in r.text
-    assert 'class="im-viewer"' in r.text
+    assert 'data-full="https://cdn.example/p_w.jpg" target="_blank" rel="noopener" @click.prevent="view($el)"' in r.text
+    assert 'src="https://cdn.example/p_x.jpg" width="320" height="320"' in r.text   # у фикстуры нет высоты — квадрат
+    assert 'class="im-viewer"' in r.text and 'id="messages" class="im-messages" x-ref="list" data-gallery' in r.text
+
+
+def test_forwarded_messages_and_reposts_render_inline(client):
+    message = {"id": 601, "date": 1788876300, "peer_id": PEER_CHAT, "from_id": 11, "out": 0, "text": "",
+               "attachments": [{"type": "wall", "wall": {
+                   "id": 77, "from_id": -5, "to_id": -5, "date": 1788800000, "text": "текст поста",
+                   "from": {"id": 5, "name": "Паблик", "photo_50": "https://cdn.example/g5.jpg"}, "attachments": []}}],
+               "fwd_messages": [{"from_id": 22, "date": 1788870000, "text": "пересланный текст",
+                                 "fwd_messages": [{"from_id": 11, "date": 1788860000, "text": "вложенный"}]}]}
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.history_page = lambda *a, **k: {**HISTORY, "items": [message] + HISTORY["items"]}
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    article = r.text.split('data-id="601"')[1].split("</article>")[0]
+    assert "Паблик" in article and "текст поста" in article and 'href="https://vk.com/wall-5_77"' in article
+    assert article.count('class="fwd"') == 2 and "пересланный текст" in article and "вложенный" in article
+    assert 'href="https://vk.com/id22"' in article and "Аня Иванова" in article
+    assert ">репост<" not in article and "пересланных<" not in article
+
+
+def test_photos_panel_lists_chat_photos_and_pages_on(client):
+    raw = {"items": [{"message_id": 9, "attachment": {"type": "photo", "photo": {"sizes": [
+        {"url": "https://cdn.example/t.jpg", "width": 320, "height": 240},
+        {"url": "https://cdn.example/full.jpg", "width": 1280, "height": 960}]}}}], "next_from": "9/1"}
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.history_photos = lambda peer_id, count, start_from="": (
+        client.app.state.vk.calls.append(("photos", peer_id, start_from)) or raw)
+    r = client.get(f"/im/{PEER_CHAT}/photos", auth=AUTH, headers={"HX-Request": "true"})
+    assert r.status_code == 200 and 'class="im-photos" data-gallery' in r.text
+    assert 'data-full="https://cdn.example/full.jpg"' in r.text and 'src="https://cdn.example/t.jpg"' in r.text
+    assert f'hx-get="/im/{PEER_CHAT}/photos?start_from=9/1"' in r.text
+    more = client.get(f"/im/{PEER_CHAT}/photos?start_from=9/1", auth=AUTH, headers={"HX-Request": "true"})
+    assert "im-photos-panel" not in more.text and 'class="tile"' in more.text
+    assert client.app.state.vk.calls[-1] == ("photos", PEER_CHAT, "9/1")
+    assert client.get(f"/im/{PEER_CHAT}/photos", auth=AUTH).status_code == 303
+
+
+def test_icon_sprite_url_carries_its_version(client):
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    assert re.search(r'href="/static/vk-icons\.svg\?v=\d+#send_24"', r.text)
+    assert "/static/vk-icons.svg#" not in r.text
+
+
+def test_chat_header_toggles_photos_and_bot_panels(client):
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    assert f'hx-get="/im/{PEER_CHAT}/photos" hx-target="#photos-slot"' in r.text
+    assert "x-show=\"panel === 'photos'\"" in r.text and "x-show=\"panel === 'bot'\"" in r.text
 
 
 def test_voice_player_renders_wave_bars_and_transcript_toggle(client):
@@ -305,7 +353,7 @@ def test_voice_player_renders_wave_bars_and_transcript_toggle(client):
     voice = r.text.split('class="voice"')[1].split("</article>")[0]
     assert voice.count('rx="1"') == 60                       # 20 с → 60 столбиков
     assert 'id="w500-1"' in voice and 'clip-path="url(#w500-1c)"' in voice
-    assert "vk-icons.svg#play_circle_32" in voice and "vk-icons.svg#pause_circle_32" in voice
+    assert '#play_circle_32"' in voice and '#pause_circle_32"' in voice
     assert 'class="aa"' in voice and "после смены выкину</p>" in voice
     assert "<audio" not in voice and "0:20" in voice
 
@@ -313,8 +361,8 @@ def test_voice_player_renders_wave_bars_and_transcript_toggle(client):
 def test_composer_is_a_vk_card_with_icon_buttons(client):
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
     form = r.text.split('class="im-composer"')[1].split("</form>")[0]
-    assert 'class="box"' in form and "vk-icons.svg#send_24" in form and "magic_wand" not in form
-    assert "vk-icons.svg#add_circle_outline_24" in form and 'placeholder="Сообщение"' in form
+    assert 'class="box"' in form and '#send_24"' in form and "magic_wand" not in form
+    assert '#add_circle_outline_24"' in form and 'placeholder="Сообщение"' in form
     assert ':class="{ ready }"' in form and "✨" not in form
     assert 'class="im-down"' in r.text
 

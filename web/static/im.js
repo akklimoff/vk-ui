@@ -48,8 +48,8 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("chat", (peerId, outRead) => ({
-    peerId, outRead, fromBottom: 0, stick: true, readUpTo: 0, settling: false, panel: false, viewer: null,
-    atBottom: true, pending: 0, before: 0, raf: 0,
+    peerId, outRead, fromBottom: 0, stick: true, readUpTo: 0, settling: false, panel: null, viewer: null,
+    atBottom: true, pending: 0, before: 0, raf: 0, olderSwap: false, swipeFrom: 0, swiped: false,
     init() {
       // синхронно, а не в $nextTick: иначе IntersectionObserver успевает увидеть сентинел
       // вверху ещё не прокрученного списка и зря грузит страницу старых
@@ -57,18 +57,20 @@ document.addEventListener("alpine:init", () => {
       list.scrollTop = list.scrollHeight;
       // измеряем до свопа: после вставки старых рядов над экраном браузер оставляет scrollTop
       // (у верхнего края scroll anchoring не срабатывает), и видимый сентинел тянул бы всю историю
-      this.$el.addEventListener("htmx:beforeSwap", () => {
+      this.$el.addEventListener("htmx:beforeSwap", (e) => {
         const el = this.$refs.list;
         this.fromBottom = el.scrollHeight - el.scrollTop;
         this.stick = this.nearBottom();
         this.before = Number(lastRendered().after);
+        // сентинел есть и у панели фотографий: скролл ленты правится только за её собственные старые страницы
+        this.olderSwap = e.detail.target.classList.contains("im-more") && el.contains(e.detail.target);
       });
       this.$el.addEventListener("htmx:afterSwap", (e) => {
         const state = document.getElementById("chat-state");
         if (state) this.outRead = Number(state.dataset.outRead);
         const target = e.detail.target;
         if (target.id === "messages") this.settleMessages();
-        if (target.classList.contains("im-more")) {
+        if (this.olderSwap) {
           this.dedupeDays();
           this.$refs.list.scrollTop = this.$refs.list.scrollHeight - this.fromBottom;
           this.markStuck();
@@ -135,6 +137,27 @@ document.addEventListener("alpine:init", () => {
         if (list.scrollTop > 0 && chip.offsetTop <= list.scrollTop) stuck = chip;
       });
       stuck?.classList.add("stuck");
+    },
+    // листает фото той же ленты или панели, откуда открыт снимок, — как в VK
+    view(el) {
+      const items = [...el.closest("[data-gallery]").querySelectorAll("[data-full]")];
+      this.viewer = { urls: items.map((a) => a.dataset.full), i: Math.max(0, items.indexOf(el)) };
+    },
+    get shown() { return this.viewer ? this.viewer.urls[this.viewer.i] : ""; },
+    step(delta) {
+      if (!this.viewer) return;
+      const i = this.viewer.i + delta;
+      if (i < 0 || i >= this.viewer.urls.length) return;
+      this.viewer.i = i;
+      const next = this.viewer.urls[i + delta];
+      if (next) new Image().src = next;
+    },
+    typing(e) { return ["INPUT", "TEXTAREA"].includes(e.target.tagName); },
+    // после свайпа по снимку браузер шлёт ещё и click — без флага он перелистнул бы второй раз
+    swipe(x) {
+      const dx = x - this.swipeFrom;
+      this.swiped = Math.abs(dx) > 50;
+      if (this.swiped) this.step(dx < 0 ? 1 : -1);
     },
     nearBottom() {
       const el = this.$refs.list;

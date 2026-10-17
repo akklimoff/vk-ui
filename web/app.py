@@ -13,7 +13,7 @@ from bot.vk import VkClient
 from web.auth import BLOCKED, LOGIN_PATH, WRONG_PASSWORD, Auth, NotLoggedIn, same_site, safe_next, to_login
 from web.humanize import clock, mmss, plural, short_since
 from web.im.routes import create_router
-from web.im.views import presence, preview, wave_bars
+from web.im.views import presence, preview, wave_bars, when
 from ai.personas import list_personas, load_persona
 from common.redact import sanitize_reply
 from web import dryrun, journal, state, trust
@@ -47,7 +47,7 @@ def create_app(settings: Settings, vk_factory=VkClient, ai_factory=ai_backend) -
     app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
     render = Renderer(os.path.join(HERE, "templates"), os.path.join(HERE, "static"), peer_label=peer_label, peer_link=peer_link,
                       model_label=model_label, clock=clock, mmss=mmss, plural=plural, preview=preview,
-                      since=short_since, presence=presence, wave_bars=wave_bars)
+                      since=short_since, presence=presence, wave_bars=wave_bars, when=when)
     app.state.vk = None
     app.state.ai = None
 

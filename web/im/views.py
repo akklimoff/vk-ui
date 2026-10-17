@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
+
+from web.humanize import mmss, plural
 
 GROUP_CHAT_PEER_BASE = 2_000_000_000
 ATTACHMENT_LABELS = {
@@ -13,13 +16,34 @@ ATTACHMENT_LABELS = {
     "link": "[ссылка]",
     "graffiti": "[граффити]",
     "wall": "[репост]",
+    "wall_reply": "[комментарий]",
+    "story": "[история]",
+    "gift": "[подарок]",
+    "poll": "[опрос]",
+    "call": "[звонок]",
+    "market": "[товар]",
+    "article": "[статья]",
+    "audio_playlist": "[плейлист]",
+    "money_transfer": "[денежный перевод]",
+    "money_request": "[запрос денег]",
+    "podcast": "[подкаст]",
+    "event": "[мероприятие]",
+    "mini_app": "[мини-приложение]",
+    "artist": "[исполнитель]",
+    "group_call_in_progress": "[групповой звонок]",
 }
 SERIES_GAP = 300.0
 MONTHS = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
           "сентября", "октября", "ноября", "декабря")
 PREVIEW_LABELS = {"photo": "Фотография", "sticker": "Стикер", "voice": "Голосовое сообщение",
                   "doc": "Документ", "video": "Видео", "audio": "Аудиозапись", "link": "Ссылка",
-                  "wall": "Запись на стене", "other": "Вложение"}
+                  "wall": "Запись на стене", "wall_reply": "Комментарий", "story": "История",
+                  "gift": "Подарок", "poll": "Опрос", "call": "Звонок", "market": "Товар", "article": "Статья",
+                  "audio_playlist": "Плейлист", "graffiti": "Граффити", "money": "Денежный перевод",
+                  "other": "Вложение"}
+CALL_STATES = {"canceled_by_initiator": "Отменён", "canceled_by_receiver": "Отклонён", "busy": "Занято"}
+PHOTO_PREVIEW = 600
+PHOTO_TILE = 300
 
 
 def is_chat(peer_id: int) -> bool:
@@ -47,6 +71,41 @@ class Attachment:
     duration: int = 0
     transcript: str = ""
     waveform: tuple[int, ...] = ()
+    width: int = 0
+    height: int = 0
+    subtitle: str = ""
+    href: str = ""
+    lines: tuple[str, ...] = ()
+    post: "Post | None" = None
+
+    def fit(self, box: int) -> tuple[int, int]:
+        """Размер превью в рамке box×box: заранее известный размер не даёт ленте прыгать, пока картинка грузится."""
+        if not self.width or not self.height:
+            return box, box
+        scale = min(1.0, box / self.width, box / self.height)
+        return max(1, round(self.width * scale)), max(1, round(self.height * scale))
+
+
+@dataclass(frozen=True)
+class Post:
+    author: str
+    photo: str
+    ts: float
+    text: str
+    attachments: tuple[Attachment, ...]
+    href: str
+    original: "Post | None" = None
+
+
+@dataclass(frozen=True)
+class Forward:
+    from_id: int
+    author: str
+    photo: str
+    ts: float
+    text: str
+    attachments: tuple[Attachment, ...] = ()
+    forwards: tuple["Forward", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -73,7 +132,7 @@ class Message:
     read: bool
     attachments: tuple[Attachment, ...] = ()
     reply: Quote | None = None
-    fwd_count: int = 0
+    forwards: tuple[Forward, ...] = ()
     action: str = ""
     bot: BotMark | None = None
 
@@ -106,7 +165,7 @@ class Profiles:
             return f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
         if uid in self._groups:
             return self._groups[uid].get("name", f"club{-uid}")
-        return f"id{uid}"
+        return f"club{-uid}" if uid < 0 else f"id{uid}"
 
     def photo(self, uid: int) -> str:
         return (self._users.get(uid) or self._groups.get(uid) or {}).get("photo_50", "")
@@ -126,37 +185,157 @@ def web_link(url) -> str:
     return url if isinstance(url, str) and url.startswith(("https://", "http://")) else ""
 
 
-def attachment_of(att: dict) -> Attachment:
+def best_size(sizes: list, at_least: int, key: str = "url") -> tuple[str, int, int]:
+    """Наименьший размер не уже at_least, иначе самый большой; у документов адрес лежит в src, а не в url."""
+    usable = sorted((s for s in sizes or [] if s.get(key)), key=lambda s: s.get("width") or 0)
+    if not usable:
+        return "", 0, 0
+    chosen = next((s for s in usable if (s.get("width") or 0) >= at_least), usable[-1])
+    return chosen[key], int(chosen.get("width") or 0), int(chosen.get("height") or 0)
+
+
+def file_size(size: int) -> str:
+    if size < 1024 * 1024:
+        return f"{max(1, round(size / 1024))} КБ"
+    return f"{size / 1024 / 1024:.1f} МБ"
+
+
+def domain(url: str) -> str:
+    try:
+        return urlsplit(url).hostname or ""
+    except ValueError:
+        return ""
+
+
+def author_of(body: dict, profiles: "Profiles") -> tuple[str, str]:
+    """Автор записи: VK кладёт его в from, а если нет — его ищут в profiles/groups ответа."""
+    who = body.get("from") or {}
+    name = who.get("name") or " ".join(x for x in (who.get("first_name"), who.get("last_name")) if x)
+    uid = body.get("from_id") or body.get("owner_id") or 0
+    return name or profiles.name(uid), who.get("photo_50") or profiles.photo(uid)
+
+
+def post_of(body: dict, profiles: "Profiles") -> Post:
+    author, photo = author_of(body, profiles)
+    owner = body.get("owner_id") or body.get("to_id") or body.get("from_id")
+    history = body.get("copy_history") or []
+    return Post(author=author, photo=photo, ts=float(body.get("date", 0)), text=body.get("text") or "",
+                attachments=tuple(attachment_of(a, profiles) for a in body.get("attachments") or []),
+                href=f"https://vk.com/wall{owner}_{body['id']}" if owner and body.get("id") else "",
+                original=post_of(history[0], profiles) if history else None)
+
+
+def photo_of(body: dict, at_least: int = PHOTO_PREVIEW) -> Attachment:
+    full = web_link(best_size(body.get("sizes"), 10 ** 6)[0])
+    preview, width, height = best_size(body.get("sizes"), at_least)
+    if not full:
+        return Attachment("photo", title="Фотография")
+    return Attachment("photo", url=full, preview=web_link(preview) or full, width=width, height=height)
+
+
+def attachment_of(att: dict, profiles: "Profiles | None" = None) -> Attachment:
+    """Вложение, которое не разобралось, становится «Вложением»: иначе одно кривое поле VK роняет весь чат и список диалогов."""
+    try:
+        return parse_attachment(att, profiles or Profiles({}))
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return Attachment("other", title="Вложение")
+
+
+def parse_attachment(att: dict, profiles: "Profiles") -> Attachment:
     kind = att.get("type", "")
     body = att.get(kind) or {}
     if kind == "photo":
-        sizes = sorted(body.get("sizes") or [], key=lambda s: s.get("width", 0))
-        if not sizes:
-            return Attachment("photo")
-        medium = next((s for s in sizes if s.get("width", 0) >= 600), sizes[-1])
-        return Attachment("photo", url=sizes[-1]["url"], preview=medium["url"])
+        return photo_of(body)
     if kind == "sticker":
         images = body.get("images") or []
         chosen = next((i for i in images if i.get("width") == 256), images[-1] if images else {})
-        return Attachment("sticker", url=chosen.get("url", ""))
+        return Attachment("sticker", url=chosen.get("url", ""), title="Стикер")
+    if kind == "graffiti":
+        return Attachment("graffiti", url=web_link(body.get("url")), width=int(body.get("width") or 0),
+                          height=int(body.get("height") or 0), title="Граффити")
     if kind == "audio_message":
         done = body.get("transcript_state") == "done"
         return Attachment("voice", url=body.get("link_mp3") or body.get("link_ogg", ""),
-                          duration=int(body.get("duration", 0)),
+                          duration=int(body.get("duration") or 0),
                           transcript=body.get("transcript", "") if done else "",
                           waveform=tuple(int(v) for v in body.get("waveform") or ()))
     if kind == "doc":
-        return Attachment("doc", url=web_link(body.get("url")), title=body.get("title") or "документ")
+        preview, width, height = best_size(((body.get("preview") or {}).get("photo") or {}).get("sizes"),
+                                           PHOTO_PREVIEW, "src")
+        details = " · ".join(x for x in ((body.get("ext") or "").upper(),
+                                         file_size(body["size"]) if body.get("size") else "") if x)
+        return Attachment("doc", url=web_link(body.get("url")), href=web_link(body.get("url")),
+                          title=body.get("title") or "документ", subtitle=details, preview=web_link(preview),
+                          width=width, height=height)
     if kind == "video":
-        images = body.get("image") or []
-        return Attachment("video", preview=images[-1]["url"] if images else "", title=body.get("title") or "видео")
+        preview, width, height = best_size(body.get("image"), 320)
+        owner, vid = body.get("owner_id"), body.get("id")
+        return Attachment("video", preview=preview, width=width, height=height, title=body.get("title") or "видео",
+                          duration=int(body.get("duration") or 0),
+                          href=f"https://vk.com/video{owner}_{vid}" if owner and vid else "")
     if kind == "audio":
-        return Attachment("audio", title=" — ".join(x for x in (body.get("artist"), body.get("title")) if x))
+        return Attachment("audio", title=body.get("title") or "аудиозапись", subtitle=body.get("artist") or "",
+                          duration=int(body.get("duration") or 0))
     if kind == "link":
-        return Attachment("link", url=web_link(body.get("url")), title=body.get("title") or body.get("url", ""))
+        url = web_link(body.get("url"))
+        preview, width, height = best_size((body.get("photo") or {}).get("sizes"), 150)
+        return Attachment("link", url=url, href=url, title=body.get("title") or body.get("url", ""),
+                          subtitle=body.get("caption") or domain(url), preview=preview, width=width, height=height)
     if kind == "wall":
-        return Attachment("wall", title="репост")
-    return Attachment("other", title=ATTACHMENT_LABELS.get(kind, "[вложение]").strip("[]"))
+        return Attachment("wall", title="Запись на стене", post=post_of(body, profiles))
+    if kind == "wall_reply":
+        owner, post, reply = body.get("owner_id"), body.get("post_id"), body.get("id")
+        href = f"https://vk.com/wall{owner}_{post}" if owner and post else ""
+        href += f"?reply={reply}" if href and reply else ""
+        return Attachment("wall_reply", title="Комментарий", subtitle=body.get("text") or "", href=href)
+    if kind == "story":
+        owner, sid = body.get("owner_id"), body.get("id")
+        href = f"https://vk.com/story{owner}_{sid}" if owner and sid else ""
+        if body.get("is_expired") or body.get("is_deleted") or body.get("can_see") == 0:
+            return Attachment("story", title="История недоступна", href=href)
+        media = (body.get("photo") or {}).get("sizes") if body.get("type") == "photo" else (body.get("video") or {}).get("image")
+        preview, width, height = best_size(media, 300)
+        return Attachment("story", title="История", preview=preview, width=width, height=height, href=href)
+    if kind == "gift":
+        return Attachment("gift", title="Подарок", url=web_link(body.get("thumb_256") or body.get("thumb_96")))
+    if kind == "poll":
+        votes = int(body.get("votes") or 0)
+        answers = tuple(f"{a.get('text', '')} — {round(float(a.get('rate') or 0))}%" for a in body.get("answers") or [])
+        label = "Анонимный опрос" if body.get("anonymous") else "Опрос"
+        return Attachment("poll", title=body.get("question") or "Опрос", lines=answers,
+                          subtitle=f"{label} · {plural(votes, 'голос', 'голоса', 'голосов')}")
+    if kind == "call":
+        state = body.get("state", "")
+        detail = mmss(int(body.get("duration") or 0)) if state == "reached" else CALL_STATES.get(state, "Без ответа")
+        return Attachment("call", title="Видеозвонок" if body.get("video") else "Звонок", subtitle=detail)
+    if kind == "market":
+        owner, mid = body.get("owner_id"), body.get("id")
+        return Attachment("market", title=body.get("title") or "Товар", subtitle=(body.get("price") or {}).get("text", ""),
+                          preview=web_link(body.get("thumb_photo")),
+                          href=f"https://vk.com/product{owner}_{mid}" if owner and mid else "")
+    if kind == "article":
+        preview, width, height = best_size((body.get("photo") or {}).get("sizes"), 150)
+        return Attachment("article", title=body.get("title") or "Статья", subtitle=body.get("owner_name") or "",
+                          preview=preview, href=web_link(body.get("view_url") or body.get("url")))
+    if kind == "audio_playlist":
+        owner, pid = body.get("owner_id"), body.get("id")
+        return Attachment("audio_playlist", title=body.get("title") or "Плейлист", subtitle="Плейлист",
+                          href=f"https://vk.com/music/playlist/{owner}_{pid}" if owner and pid else "")
+    if kind in ("money_transfer", "money_request"):
+        return Attachment("money", title="Денежный перевод" if kind == "money_transfer" else "Запрос денег",
+                          subtitle=(body.get("amount") or {}).get("text", ""))
+    return Attachment("other", title=ATTACHMENT_LABELS.get(kind, "[вложение]").strip("[]").capitalize())
+
+
+def parse_photos(raw: dict) -> tuple[list[Attachment], str]:
+    photos, items = [], raw.get("items") or []
+    for item in items:
+        att = item.get("attachment") or {}
+        if att.get("type") == "photo":
+            photo = photo_of(att.get("photo") or {}, PHOTO_TILE)
+            if photo.url:
+                photos.append(photo)
+    return photos, (raw.get("next_from") or "") if items else ""
 
 
 def action_text(action: dict | None, profiles: Profiles, from_id: int) -> str:
@@ -178,6 +357,18 @@ def action_text(action: dict | None, profiles: Profiles, from_id: int) -> str:
     return f"{who}: {kind}"
 
 
+def forward_of(msg: dict, profiles: Profiles) -> Forward:
+    from_id = msg.get("from_id", 0)
+    return Forward(from_id=from_id, author=profiles.name(from_id), photo=profiles.photo(from_id),
+                   ts=float(msg.get("date", 0)), text=msg.get("text") or "",
+                   attachments=tuple(attachment_of(a, profiles) for a in msg.get("attachments") or []),
+                   forwards=forwards_of(msg, profiles))
+
+
+def forwards_of(msg: dict, profiles: Profiles) -> tuple[Forward, ...]:
+    return tuple(forward_of(f, profiles) for f in msg.get("fwd_messages") or [])
+
+
 def message_of(msg: dict, profiles: Profiles, me_id: int, out_read: int, marks: dict) -> Message:
     from_id = msg["from_id"]
     out = from_id == me_id
@@ -186,19 +377,28 @@ def message_of(msg: dict, profiles: Profiles, me_id: int, out_read: int, marks: 
         id=msg["id"], ts=float(msg["date"]), from_id=from_id,
         author=profiles.name(from_id), photo=profiles.photo(from_id),
         text=msg.get("text") or "", out=out, read=out and msg["id"] <= out_read,
-        attachments=tuple(attachment_of(a) for a in msg.get("attachments") or []),
+        attachments=tuple(attachment_of(a, profiles) for a in msg.get("attachments") or []),
         reply=Quote(profiles.name(reply["from_id"]), reply.get("text") or preview_label(reply)) if reply else None,
-        fwd_count=len(msg.get("fwd_messages") or []),
+        forwards=forwards_of(msg, profiles),
         action=action_text(msg.get("action"), profiles, from_id),
         bot=marks.get(msg["id"]),
     )
 
 
+def attachments_label(attachments: tuple[Attachment, ...] | list[Attachment], forwards: int) -> str:
+    if attachments:
+        kinds = {a.kind for a in attachments}
+        if kinds == {"photo"} and len(attachments) > 1:
+            return plural(len(attachments), "фотография", "фотографии", "фотографий")
+        return PREVIEW_LABELS.get(attachments[0].kind, "Вложение")
+    if forwards == 1:
+        return "Пересланное сообщение"
+    return plural(forwards, "пересланное сообщение", "пересланных сообщения", "пересланных сообщений") if forwards else ""
+
+
 def preview_label(raw_message: dict) -> str:
-    atts = raw_message.get("attachments") or []
-    if atts:
-        return PREVIEW_LABELS.get(attachment_of(atts[0]).kind, "Вложение")
-    return "Пересланные сообщения" if raw_message.get("fwd_messages") else ""
+    atts = [attachment_of(a) for a in raw_message.get("attachments") or []]
+    return attachments_label(atts, len(raw_message.get("fwd_messages") or []))
 
 
 def preview(message: Message) -> str:
@@ -206,9 +406,11 @@ def preview(message: Message) -> str:
         return message.action
     if message.text:
         return message.text
-    if message.attachments:
-        return PREVIEW_LABELS.get(message.attachments[0].kind, "Вложение")
-    return "Пересланные сообщения" if message.fwd_count else ""
+    return attachments_label(message.attachments, len(message.forwards))
+
+
+def when(ts: float, now: float, tz: ZoneInfo) -> str:
+    return f"{day_label(ts, now, tz)} в {datetime.fromtimestamp(ts, tz):%H:%M}"
 
 
 def peer_of(conv: dict, profiles: Profiles) -> Peer:

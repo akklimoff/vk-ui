@@ -1,25 +1,19 @@
 {% from "partials/im_icons.html" import icon %}
+{% from "partials/im_media.html" import attachments, forwards, profile %}
 {# ожидает rows, tz и c (peer_id для удаления) #}
 {% for r in rows %}{% set m = r.message %}
 {% if r.day %}<div class="im-day"><span>{{ r.day }}</span></div>{% endif %}
 {% if r.unread %}<div class="im-unread"><span>Непрочитанные сообщения</span></div>{% endif %}
 {% if m.action %}<div class="im-action" data-id="{{ m.id }}" data-from="0" data-ts="{{ m.ts }}">{{ m.action }}</div>{% else %}
 <article class="msg {{ 'head' if r.head }} {{ 'out' if m.out }}" data-id="{{ m.id }}" data-from="{{ m.from_id }}" data-ts="{{ m.ts }}">
-  {% if r.head %}<a class="ava a36" href="https://vk.com/id{{ m.from_id }}">{% if m.photo %}<img src="{{ m.photo }}" alt="">{% else %}<i>{{ m.author[:1] }}</i>{% endif %}</a>{% endif %}
+  {% if r.head %}<a class="ava a36" href="{{ profile(m.from_id) }}" target="_blank" rel="noopener">{% if m.photo %}<img src="{{ m.photo }}" alt="">{% else %}<i>{{ m.author[:1] }}</i>{% endif %}</a>{% endif %}
   <span class="info">{% if m.out %}<span class="ticks" :class="{ read: {{ m.id }} <= outRead }">{{ icon('check_outline_16', 'one') }}{{ icon('check_double_outline_16', 'two') }}</span>{% endif %}<time>{{ m.ts|clock(tz) }}</time></span>
-  {% if r.head %}<div class="name"><a href="https://vk.com/id{{ m.from_id }}">{{ m.author }}</a>{% if m.bot %}<span class="badge-mode">бот · {{ m.bot.persona }}{% if m.bot.model %} · {{ m.bot.model }}{% endif %}</span>{% endif %}</div>
+  {% if r.head %}<div class="name"><a href="{{ profile(m.from_id) }}" target="_blank" rel="noopener">{{ m.author }}</a>{% if m.bot %}<span class="badge-mode">бот · {{ m.bot.persona }}{% if m.bot.model %} · {{ m.bot.model }}{% endif %}</span>{% endif %}</div>
   {% elif m.bot %}<div class="name"><span class="badge-mode">бот · {{ m.bot.persona }}</span></div>{% endif %}
   {% if m.reply %}<blockquote class="quote"><b>{{ m.reply.author }}</b><span>{{ m.reply.text }}</span></blockquote>{% endif %}
   {% if m.text %}<p class="text">{{ m.text }}</p>{% endif %}
-  {% for a in m.attachments %}
-    {% if a.kind == 'photo' %}<a class="photo" href="{{ a.url }}" target="_blank" rel="noopener" @click.prevent='viewer = {{ a.url|tojson }}'><img src="{{ a.preview }}" alt="фото" loading="lazy"></a>
-    {% elif a.kind == 'sticker' %}<img class="sticker" src="{{ a.url }}" alt="стикер" loading="lazy">
-    {% elif a.kind == 'voice' %}{% set wid = 'w' ~ m.id ~ '-' ~ loop.index %}{% include "partials/im_voice.html" %}
-    {% elif a.kind == 'video' %}<div class="video">{% if a.preview %}<img src="{{ a.preview }}" alt="" loading="lazy">{% endif %}<span>{{ a.title }}</span></div>
-    {% elif a.kind in ('doc', 'link') %}<a class="doc" href="{{ a.url }}" target="_blank" rel="noopener">{{ icon('document_outline_24') }}{{ a.title }}</a>
-    {% else %}<span class="badge-mode">{{ a.title }}</span>{% endif %}
-  {% endfor %}
-  {% if m.fwd_count %}<span class="fwd">{{ icon('message_forward_outline_16') }}{{ m.fwd_count }} пересланных</span>{% endif %}
+  {{ attachments(m.attachments, m.id, c.now, tz) }}
+  {{ forwards(m.forwards, m.id, c.now, tz) }}
   <span class="actions">
     {# одинарные кавычки: tojson не экранирует двойные #}
     <button type="button" title="Ответить" aria-label="Ответить" @click='$dispatch("im-reply", { id: {{ m.id }}, author: {{ m.author|tojson }}, text: {{ (m.text or (m|preview))[:80]|tojson }} })'>{{ icon('reply_24') }}</button>

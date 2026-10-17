@@ -14,7 +14,8 @@ from web import trust
 from web.im.controls import set_paused_peer, set_peer_personas
 from web.im.marks import bot_marks
 from web.im.modes import bot_mode, chat_controls
-from web.im.views import Message, Profiles, is_chat, parse_conversations, parse_history, peer_of, rows
+from web.im.views import (Message, Profiles, is_chat, parse_conversations, parse_history, parse_photos, peer_of,
+                          rows)
 from web.im.voice import MAX_VOICE_BYTES, prepare_voice
 from web.render import is_hx
 from web.services import update_config
@@ -22,6 +23,7 @@ from web.services import update_config
 DIALOGS = 60
 PAGE = 40
 POLL_WINDOW = 50
+PHOTOS = 60
 
 
 def create_router(settings, vk, render, safe_error) -> APIRouter:
@@ -137,6 +139,14 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
             return Response(headers={"HX-Trigger": json.dumps({"toast": "Отправлено"})})
         return render.partial(request, "im_rows_page", {"chat": ctx, "after": after, "before": None, "page": "im"},
                               toast="Отправлено")
+
+    @router.get("/im/{peer_id}/photos")
+    def photos_partial(request: Request, peer_id: int, start_from: str = ""):
+        if not is_hx(request):
+            return RedirectResponse(f"/im?sel={peer_id}", status_code=303)
+        photos, next_from = parse_photos(guard(lambda: vk().history_photos(peer_id, PHOTOS, start_from)))
+        return render.partial(request, "im_photos", {"peer_id": peer_id, "photos": photos, "next_from": next_from,
+                                                     "more": bool(start_from), "page": "im"})
 
     @router.post("/im/{peer_id}/read")
     def mark_read(peer_id: int):

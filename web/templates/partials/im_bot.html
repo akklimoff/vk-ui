@@ -4,7 +4,7 @@
   <header class="im-bot-head">
     <span class="ava a32 robot">{{ icon('robot_outline_24') }}</span>
     <span class="body"><span class="line"><b>Агент в этом чате</b>{% with m = mode %}{% include "partials/im_badge.html" %}{% endwith %}</span><small title="{{ mode.reason }}">{{ mode.reason }}</small></span>
-    <button type="button" class="ib" @click="panel = false" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
+    <button type="button" class="ib" @click="panel = null" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
   </header>
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
   {% if c.chat or c.saved %}<h4>Слышит ли агент</h4>

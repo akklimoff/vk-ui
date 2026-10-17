@@ -1,1 +1,1 @@
-{% macro icon(name, cls='') %}{% set size = name.rsplit('_', 1)[1] %}<svg class="ico{{ ' ' ~ cls if cls }}" width="{{ size }}" height="{{ size }}" aria-hidden="true"><use href="/static/vk-icons.svg#{{ name }}"/></svg>{% endmacro %}
+{% macro icon(name, cls='') %}{% set size = name.rsplit('_', 1)[1] %}<svg class="ico{{ ' ' ~ cls if cls }}" width="{{ size }}" height="{{ size }}" aria-hidden="true"><use href="{{ asset('vk-icons.svg') }}#{{ name }}"/></svg>{% endmacro %}

@@ -12,11 +12,15 @@
         <small>{% if c.peer and c.peer.kind == 'chat' %}{{ c.peer.members|plural('участник', 'участника', 'участников') }}{% elif c.peer and c.peer.kind == 'group' %}сообщество{% elif c.peer %}{{ c.peer|presence(c.now, c.tz) }}{% endif %}</small>
       </span>
       <a class="ib" href="{{ c.peer_id|peer_link }}" title="Открыть в VK" aria-label="Открыть в VK" target="_blank" rel="noopener">{{ icon('logo_vk_outline_24') }}</a>
-      <button type="button" class="ib" title="Агент в этом чате" aria-label="Агент в этом чате" @click="panel = !panel"
+      <button type="button" class="ib" title="Фотографии чата" aria-label="Фотографии чата" :class="{ on: panel === 'photos' }"
+              @click="panel = panel === 'photos' ? null : 'photos'"
+              hx-get="/im/{{ c.peer_id }}/photos" hx-target="#photos-slot" hx-swap="innerHTML" hx-trigger="click once">{{ icon('picture_outline_24') }}</button>
+      <button type="button" class="ib" title="Агент в этом чате" aria-label="Агент в этом чате" :class="{ on: panel === 'bot' }"
+              @click="panel = panel === 'bot' ? null : 'bot'"
               hx-get="/im/{{ c.peer_id }}/bot" hx-target="#bot-slot" hx-swap="innerHTML" hx-trigger="click once">{{ icon('robot_outline_24') }}</button>
     </header>
     <div class="im-history">
-      <div id="messages" class="im-messages" x-ref="list" @scroll.passive="onScroll()">
+      <div id="messages" class="im-messages" x-ref="list" data-gallery @scroll.passive="onScroll()">
         {% if c.oldest %}<div class="im-more" hx-get="/im/{{ c.peer_id }}/messages?before={{ c.oldest }}" hx-trigger="intersect once delay:500ms" hx-swap="outerHTML"></div>{% endif %}
         {% with rows = c.rows, tz = c.tz %}{% include "partials/im_rows.html" %}{% endwith %}
         {% if not c.rows %}<div class="im-empty">Сообщений пока нет</div>{% endif %}
@@ -44,10 +48,19 @@
       </div>
     </form>
   </div>
-  <div id="bot-slot" class="im-bot-slot" x-show="panel" x-cloak></div>
-  <div class="im-viewer" x-show="viewer" x-cloak @click="viewer = null" @keydown.escape.window="viewer = null">
-    <button type="button" class="ib" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
-    <img :src="viewer" alt="">
+  <div id="bot-slot" class="im-bot-slot" x-show="panel === 'bot'" x-cloak></div>
+  <div id="photos-slot" class="im-bot-slot" x-show="panel === 'photos'" x-cloak></div>
+  <div class="im-viewer" x-show="viewer" x-cloak @click.self="swiped ? swiped = false : viewer = null" @keydown.escape.window="viewer = null"
+       @keydown.arrow-left.window="typing($event) || step(-1)" @keydown.arrow-right.window="typing($event) || step(1)"
+       @pointerdown="swipeFrom = $event.clientX; swiped = false" @pointerup="swipe($event.clientX)">
+    <div class="bar">
+      <span x-text="viewer && viewer.urls.length > 1 ? `${viewer.i + 1} из ${viewer.urls.length}` : ''"></span>
+      <a class="ib" :href="shown" target="_blank" rel="noopener" title="Открыть оригинал" aria-label="Открыть оригинал">{{ icon('external_link_outline_24') }}</a>
+      <button type="button" class="ib" @click="viewer = null" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
+    </div>
+    <button type="button" class="ib nav prev" x-show="viewer && viewer.i > 0" @click="step(-1)" aria-label="Предыдущая">{{ icon('chevron_left_24') }}</button>
+    <img :src="shown" alt="" draggable="false" @click="swiped ? swiped = false : step(1)">
+    <button type="button" class="ib nav next" x-show="viewer && viewer.i < viewer.urls.length - 1" @click="step(1)" aria-label="Следующая">{{ icon('chevron_right_24') }}</button>
   </div>
   <div id="chat-state" data-out-read="{{ c.out_read }}" hidden></div>
   <div id="chat-poll" hx-get="/im/{{ c.peer_id }}/messages"

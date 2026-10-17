@@ -2,8 +2,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from tests.web.im_fixtures import HISTORY, CONVERSATIONS, ME, PEER_CHAT, PEER_USER
-from web.im.views import (BotMark, Message, Peer, attachment_of, day_label, parse_conversations,
-                          parse_history, presence, preview, rows, wave_bars)
+from web.im.views import (Attachment, BotMark, Message, Peer, Profiles, attachment_of, day_label, parse_conversations,
+                          parse_history, parse_photos, presence, preview, rows, wave_bars)
 
 TZ = ZoneInfo("Europe/Moscow")
 
@@ -42,14 +42,93 @@ def test_bot_marks_attach_to_own_messages():
 
 def test_attachment_of_picks_largest_photo_and_medium_preview():
     att = attachment_of({"type": "photo", "photo": {"sizes": [
-        {"type": "s", "url": "s", "width": 75}, {"type": "x", "url": "x", "width": 604},
-        {"type": "w", "url": "w", "width": 2560}]}})
-    assert att.kind == "photo" and att.url == "w" and att.preview == "x"
+        {"type": "s", "url": "https://s", "width": 75}, {"type": "x", "url": "https://x", "width": 604},
+        {"type": "w", "url": "https://w", "width": 2560}]}})
+    assert att.kind == "photo" and att.url == "https://w" and att.preview == "https://x"
 
 
 def test_attachment_of_unknown_type_is_labelled():
-    assert attachment_of({"type": "market", "market": {}}).kind == "other"
-    assert attachment_of({"type": "wall", "wall": {}}).title == "репост"
+    other = attachment_of({"type": "widget", "widget": {}})
+    assert other.kind == "other" and other.title == "Вложение"
+    assert attachment_of({"type": "event", "event": {}}).title == "Мероприятие"
+
+
+def test_photo_keeps_preview_size_and_fits_a_box():
+    att = attachment_of({"type": "photo", "photo": {"sizes": [
+        {"url": "https://x", "width": 604, "height": 1208}, {"url": "https://w", "width": 1280, "height": 2560}]}})
+    assert (att.width, att.height) == (604, 1208) and att.fit(320) == (160, 320)
+    assert Attachment("photo").fit(320) == (320, 320)
+
+
+def test_wall_attachment_is_a_post_with_author_and_original():
+    profiles = Profiles({"profiles": [{"id": 22, "first_name": "Аня", "last_name": "Иванова", "photo_50": "u22"}]})
+    att = attachment_of({"type": "wall", "wall": {
+        "id": 5, "from_id": 22, "to_id": 22, "date": 100, "text": "моя подпись", "attachments": [],
+        "copy_history": [{"id": 9, "owner_id": -3, "from_id": -3, "date": 50, "text": "оригинал",
+                          "attachments": [{"type": "photo", "photo": {"sizes": [{"url": "https://p", "width": 800}]}}]}]}},
+        profiles)
+    post = att.post
+    assert att.kind == "wall" and post.author == "Аня Иванова" and post.photo == "u22"
+    assert post.text == "моя подпись" and post.href == "https://vk.com/wall22_5"
+    assert post.original.text == "оригинал" and post.original.href == "https://vk.com/wall-3_9"
+    assert post.original.author == "club3"
+    assert post.original.attachments[0].kind == "photo"
+
+
+def test_wall_author_comes_from_the_from_field_first():
+    att = attachment_of({"type": "wall", "wall": {"id": 1, "from_id": -7, "date": 1, "text": "",
+                                                  "from": {"id": 7, "name": "Паблик", "photo_50": "g7"}}})
+    assert att.post.author == "Паблик" and att.post.photo == "g7" and att.post.href == "https://vk.com/wall-7_1"
+
+
+def test_forwarded_messages_are_parsed_recursively():
+    raw = {**HISTORY, "items": [{"id": 700, "date": 10, "from_id": 11, "text": "", "attachments": [],
+                                 "fwd_messages": [{"from_id": 22, "date": 5, "text": "раз",
+                                                   "fwd_messages": [{"from_id": 11, "date": 1, "text": "два"}]},
+                                                  {"from_id": 11, "date": 6, "text": "три"}]}]}
+    (message,), _ = parse_history(raw, ME)
+    first, second = message.forwards
+    assert first.author == "Аня Иванова" and first.text == "раз" and first.forwards[0].text == "два"
+    assert second.author == "Вася Пупкин" and preview(message) == "2 пересланных сообщения"
+
+
+def test_other_vk_attachments_get_their_own_kind():
+    story = attachment_of({"type": "story", "story": {"id": 3, "owner_id": 22, "type": "photo",
+                                                      "photo": {"sizes": [{"url": "s", "width": 720}]}}})
+    assert story.kind == "story" and story.preview == "s" and story.href == "https://vk.com/story22_3"
+    gone = attachment_of({"type": "story", "story": {"id": 3, "owner_id": 22, "is_expired": True}})
+    assert gone.title == "История недоступна" and not gone.preview
+    assert attachment_of({"type": "gift", "gift": {"thumb_256": "https://cdn.example/g.png"}}).url == "https://cdn.example/g.png"
+    poll = attachment_of({"type": "poll", "poll": {"question": "Куда?", "votes": 3, "answers": [
+        {"text": "кино", "rate": 66.7}, {"text": "бар", "rate": 33.3}]}})
+    assert poll.title == "Куда?" and poll.lines == ("кино — 67%", "бар — 33%") and poll.subtitle == "Опрос · 3 голоса"
+    call = attachment_of({"type": "call", "call": {"state": "reached", "duration": 75, "video": True}})
+    assert call.title == "Видеозвонок" and call.subtitle == "1:15"
+    assert attachment_of({"type": "call", "call": {"state": "canceled_by_receiver"}}).subtitle == "Отклонён"
+    video = attachment_of({"type": "video", "video": {"id": 4, "owner_id": -1, "duration": 61, "title": "клип",
+                                                      "image": [{"url": "v1", "width": 130}, {"url": "v2", "width": 320}]}})
+    assert video.preview == "v2" and video.href == "https://vk.com/video-1_4" and video.duration == 61
+    doc = attachment_of({"type": "doc", "doc": {"title": "отчёт.pdf", "ext": "pdf", "size": 2_500_000,
+                                                "url": "https://vk.com/doc1_2"}})
+    assert doc.href == "https://vk.com/doc1_2" and doc.subtitle == "PDF · 2.4 МБ"
+    link = attachment_of({"type": "link", "link": {"url": "https://example.com/a", "title": "Статья"}})
+    assert link.subtitle == "example.com" and link.href == "https://example.com/a"
+
+
+def test_preview_counts_photos_and_names_new_kinds():
+    photo = attachment_of({"type": "photo", "photo": {"sizes": [{"url": "https://p", "width": 100}]}})
+    assert preview(Message(1, 0, 11, "Вася", "", "", False, False, attachments=(photo, photo, photo))) == "3 фотографии"
+    gift = attachment_of({"type": "gift", "gift": {}})
+    assert preview(Message(1, 0, 11, "Вася", "", "", False, False, attachments=(gift,))) == "Подарок"
+
+
+def test_parse_photos_takes_tiles_and_cursor():
+    raw = {"items": [{"attachment": {"type": "photo", "photo": {"sizes": [
+        {"url": "https://t", "width": 320}, {"url": "https://f", "width": 1280}]}}},
+        {"attachment": {"type": "video", "video": {}}}], "next_from": "n"}
+    photos, cursor = parse_photos(raw)
+    assert [(p.url, p.preview) for p in photos] == [("https://f", "https://t")] and cursor == "n"
+    assert parse_photos({"items": [], "next_from": "n"}) == ([], "")
 
 
 def test_preview_prefers_text_then_attachment_label():
@@ -123,3 +202,12 @@ def test_only_web_addresses_become_links():
     link = {"type": "link", "link": {"url": "https://example.org/a", "title": "сайт"}}
     assert attachment_of(doc).url == "" and attachment_of(doc).title == "файл"
     assert attachment_of(link).url == "https://example.org/a"
+
+
+def test_odd_vk_fields_do_not_break_parsing():
+    assert attachment_of({"type": "link", "link": {"url": "https://[oops/x"}}).subtitle == ""
+    assert attachment_of({"type": "poll", "poll": {"votes": None, "answers": [{"text": "да", "rate": None}]}}).lines == ("да — 0%",)
+    assert attachment_of({"type": "photo", "photo": {"sizes": [{"url": "https://a", "width": None}]}}).url == "https://a"
+    assert attachment_of({"type": "photo", "photo": {"sizes": [{"url": "javascript:alert(1)", "width": 9}]}}).url == ""
+    assert attachment_of({"type": "video", "video": {"image": [{"url": "u", "width": "wide"}]}}) == Attachment("other", title="Вложение")
+    assert attachment_of({"type": "wall_reply", "wall_reply": {"owner_id": 1, "post_id": 2}}).href == "https://vk.com/wall1_2"

@@ -147,7 +147,7 @@ def test_bot_forms_without_htmx_redirect_to_chat(client, settings):
 
 def test_panel_keeps_its_vk_look(client):
     r = client.get(f"/im/{PEER_CHAT}/bot", auth=AUTH, headers=HX)
-    assert 'class="im-bot-head"' in r.text and "vk-icons.svg#cancel_24" in r.text and '@click="panel = false"' in r.text
+    assert 'class="im-bot-head"' in r.text and '#cancel_24"' in r.text and '@click="panel = null"' in r.text
     assert r.text.count('role="switch" class="sw"') >= 5
     assert 'class="chip-p"' in r.text and 'name="slug" value="rina"' in r.text
     assert 'class="vk-btn"' in r.text and ">Сохранить<" in r.text

@@ -1,0 +1,57 @@
+{% from "partials/im_icons.html" import icon %}
+{# key — уникальная в документе приставка: из неё собираются id волн голосовых #}
+
+{% macro profile(uid) %}https://vk.com/{{ 'club' ~ (-uid) if uid < 0 else 'id' ~ uid }}{% endmacro %}
+
+{% macro glyph(kind) %}{% if kind == 'audio' %}{{ icon('music_outline_20') }}{% elif kind == 'link' %}{{ icon('link_circle_outline_20') }}{% elif kind == 'wall_reply' %}{{ icon('comment_outline_20') }}{% elif kind == 'poll' %}{{ icon('poll_outline_20') }}{% elif kind == 'call' %}{{ icon('phone_outline_20') }}{% elif kind == 'market' %}{{ icon('market_outline_20') }}{% elif kind == 'article' %}{{ icon('article_outline_20') }}{% elif kind == 'audio_playlist' %}{{ icon('playlist_outline_20') }}{% elif kind == 'money' %}{{ icon('money_circle_outline_20') }}{% elif kind == 'story' %}{{ icon('story_outline_20') }}{% elif kind == 'video' %}{{ icon('video_outline_20') }}{% elif kind == 'gift' %}{{ icon('gift_outline_20') }}{% else %}{{ icon('document_outline_20') }}{% endif %}{% endmacro %}
+
+{% macro card(a) %}{% set tag = 'a' if a.href else 'div' %}
+<{{ tag }} class="card"{% if a.href %} href="{{ a.href }}" target="_blank" rel="noopener"{% endif %}>
+  {% if a.preview %}<img class="thumb" src="{{ a.preview }}" alt="" loading="lazy">{% else %}<span class="glyph">{{ glyph(a.kind) }}</span>{% endif %}
+  <span class="body"><b>{{ a.title }}</b>{% if a.subtitle %}<small>{{ a.subtitle }}</small>{% endif %}{% for line in a.lines %}<span class="line">{{ line }}</span>{% endfor %}</span>
+  {% if a.duration %}<span class="dur">{{ a.duration|mmss }}</span>{% endif %}
+</{{ tag }}>{% endmacro %}
+
+{% macro photos(list) %}{% set n = list|length %}
+<div class="photos{{ ' grid n' ~ (n if n < 5 else 'many') if n > 1 }}">{% for a in list %}
+  <a class="photo" href="{{ a.url }}" data-full="{{ a.url }}" target="_blank" rel="noopener" @click.prevent="view($el)">{% set w, h = a.fit(320) %}<img src="{{ a.preview }}" width="{{ w }}" height="{{ h }}" alt="фото" loading="lazy"></a>{% endfor %}
+</div>{% endmacro %}
+
+{% macro attachments(list, key, now, tz) %}
+{% set shots = list|selectattr('kind', 'equalto', 'photo')|selectattr('url')|list %}
+{% if shots %}{{ photos(shots) }}{% endif %}
+{% for a in list if not (a.kind == 'photo' and a.url) %}
+  {% if a.kind in ('sticker', 'graffiti') and a.url %}<img class="sticker" src="{{ a.url }}" alt="{{ 'стикер' if a.kind == 'sticker' else 'граффити' }}" loading="lazy">
+  {% elif a.kind == 'gift' and a.url %}<figure class="gift"><img src="{{ a.url }}" alt="подарок" loading="lazy"><figcaption>{{ icon('gift_outline_20') }}Подарок</figcaption></figure>
+  {% elif a.kind == 'voice' %}{% set wid = 'w' ~ key ~ '-' ~ loop.index %}{% include "partials/im_voice.html" %}
+  {% elif a.kind == 'video' and a.preview %}{% set w, h = a.fit(320) %}{% set tag = 'a' if a.href else 'div' %}
+    <{{ tag }} class="video"{% if a.href %} href="{{ a.href }}" target="_blank" rel="noopener"{% endif %}>
+      <span class="thumb"><img src="{{ a.preview }}" width="{{ w }}" height="{{ h }}" alt="" loading="lazy"><span class="play">{{ icon('play_48') }}</span>{% if a.duration %}<span class="dur">{{ a.duration|mmss }}</span>{% endif %}</span>
+      <span class="title">{{ a.title }}</span>
+    </{{ tag }}>
+  {% elif a.kind == 'story' and a.preview %}
+{% set tag = 'a' if a.href else 'div' %}
+    <{{ tag }} class="story"{% if a.href %} href="{{ a.href }}" target="_blank" rel="noopener"{% endif %}><img src="{{ a.preview }}" alt="" loading="lazy"><span>{{ icon('story_outline_20') }}История</span></{{ tag }}>
+  {% elif a.kind == 'wall' and a.post %}{{ post(a.post, key ~ 'p' ~ loop.index, now, tz) }}
+  {% else %}{{ card(a) }}{% endif %}
+{% endfor %}{% endmacro %}
+
+{% macro post(p, key, now, tz) %}
+<div class="post">
+  <div class="post-head"><span class="ava a32">{% if p.photo %}<img src="{{ p.photo }}" alt="">{% else %}<i>{{ p.author[:1] }}</i>{% endif %}</span>
+    <span class="body"><b>{{ p.author }}</b>{% if p.ts %}<small>{{ p.ts|when(now, tz) }}</small>{% endif %}</span></div>
+  {% if p.text %}<p class="text">{{ p.text }}</p>{% endif %}
+  {{ attachments(p.attachments, key, now, tz) }}
+  {% if p.original %}{{ post(p.original, key ~ 'o', now, tz) }}{% endif %}
+  {% if not (p.text or p.attachments or p.original) %}<p class="muted">Запись удалена или скрыта</p>{% endif %}
+  {% if p.href %}<a class="post-link" href="{{ p.href }}" target="_blank" rel="noopener">Открыть запись</a>{% endif %}
+</div>{% endmacro %}
+
+{% macro forwards(list, key, now, tz) %}{% for f in list %}
+<div class="fwd">
+  <div class="fwd-head"><a class="ava a28" href="{{ profile(f.from_id) }}" target="_blank" rel="noopener">{% if f.photo %}<img src="{{ f.photo }}" alt="">{% else %}<i>{{ f.author[:1] }}</i>{% endif %}</a>
+    <span class="body"><a class="fwd-name" href="{{ profile(f.from_id) }}" target="_blank" rel="noopener">{{ f.author }}</a>{% if f.ts %}<small>{{ f.ts|when(now, tz) }}</small>{% endif %}</span></div>
+  {% if f.text %}<p class="text">{{ f.text }}</p>{% endif %}
+  {{ attachments(f.attachments, key ~ 'f' ~ loop.index, now, tz) }}
+  {{ forwards(f.forwards, key ~ 'f' ~ loop.index, now, tz) }}
+</div>{% endfor %}{% endmacro %}
