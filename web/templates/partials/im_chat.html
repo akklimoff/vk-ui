@@ -11,7 +11,7 @@
         <span class="line"><b>{{ c.peer.title if c.peer else c.peer_id|peer_label }}</b><span id="chat-badge">{% with m = c.mode %}{% include "partials/im_badge.html" %}{% endwith %}</span></span>
         <small>{% if c.peer and c.peer.kind == 'chat' %}{{ c.peer.members|plural('участник', 'участника', 'участников') }}{% elif c.peer and c.peer.kind == 'group' %}сообщество{% elif c.peer %}{{ c.peer|presence(c.now, c.tz) }}{% endif %}</small>
       </span>
-      <button type="button" class="ib read-now" x-show="!markRead && unread" x-cloak @click="readNow()"
+      <button type="button" class="ib read-now" x-show="unread" x-cloak @click="readNow()"
               title="Отметить прочитанным" aria-label="Отметить прочитанным">{{ icon('check_double_outline_16') }}</button>
       <a class="ib" href="{{ c.peer_id|peer_link }}" title="Открыть в VK" aria-label="Открыть в VK" target="_blank" rel="noopener">{{ icon('logo_vk_outline_24') }}</a>
       <button type="button" class="ib" title="Вложения чата" aria-label="Вложения чата" :class="{ on: panel === 'media' }"

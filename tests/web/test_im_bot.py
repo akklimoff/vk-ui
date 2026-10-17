@@ -47,7 +47,7 @@ def test_panel_of_an_untrusted_chat_says_the_agent_is_silent(client):
     assert f"/im/{PEER_CHAT}/bot/listens" in r.text and f"/im/{PEER_CHAT}/bot/paused" in r.text
     assert "Вася Пупкин" in r.text and "Аня Иванова" in r.text
     assert "Валентина Тина" not in r.text.split("Участники")[1]
-    assert "Рина" in r.text and "Моника" in r.text and "Читать без отметки" in r.text
+    assert "Рина" in r.text and "Моника" in r.text and "Читать без отметки" not in r.text
     for gone in ("Отвечать без тега", "Знакомиться", "Заблокировать", "игнор", "user_prompts"):
         assert gone not in r.text
 
@@ -148,6 +148,6 @@ def test_bot_forms_without_htmx_redirect_to_chat(client, settings):
 def test_panel_keeps_its_vk_look(client):
     r = client.get(f"/im/{PEER_CHAT}/bot", auth=AUTH, headers=HX)
     assert 'class="im-bot-head"' in r.text and '#cancel_24"' in r.text and '@click="panel = null"' in r.text
-    assert r.text.count('role="switch" class="sw"') >= 5
+    assert r.text.count('role="switch" class="sw"') >= 4
     assert 'class="chip-p"' in r.text and 'name="slug" value="rina"' in r.text
     assert 'class="vk-btn"' in r.text and ">Сохранить<" in r.text

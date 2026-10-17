@@ -437,20 +437,13 @@ def test_search_reaches_chats_beyond_the_loaded_list(client):
     assert empty.status_code == 200 and "data-peer" not in empty.text
 
 
-def test_read_marks_switch_lives_in_runtime_json(client, settings):
+def test_opening_a_chat_never_marks_it_read(client):
     hx = {"HX-Request": "true"}
-    assert 'im(null, true)' in client.get("/im", auth=AUTH).text
-    r = client.post("/im/read-marks", auth=AUTH, headers=hx, data={})
-    assert r.status_code == 204 and "не отмечаются" in json.loads(r.headers["HX-Trigger"])["toast"]
-    assert json.load(open(settings.runtime_file))["mark_read"] is False
-    assert 'im(null, false)' in client.get("/im", auth=AUTH).text
-    client.post("/im/read-marks", auth=AUTH, headers=hx, data={"on": "1"})
-    assert json.load(open(settings.runtime_file))["mark_read"] is True
-
-
-def test_chat_offers_manual_read_and_knows_its_unread(client):
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
-    assert f'chat({PEER_CHAT}, 501, 2)' in r.text and 'x-show="!markRead && unread"' in r.text
+    client.get(f"/im/{PEER_CHAT}", auth=AUTH, headers=hx)
+    client.get(f"/im/{PEER_CHAT}/messages?after=500", auth=AUTH, headers=hx)
+    assert not [c for c in client.app.state.vk.calls if c[0] == "read"]
+    assert f'chat({PEER_CHAT}, 501, 2)' in r.text and 'x-show="unread"' in r.text and "/read-marks" not in r.text
 
 
 def test_a_refused_send_gives_the_composer_back(client):

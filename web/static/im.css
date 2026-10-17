@@ -112,10 +112,6 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
 .im-side-foot .ico { color: var(--vk-icon-2); }
 .im-side-foot span { flex: 1; }
 .page-im .im-side-foot { width: 100%; }
-form.im-side-foot { padding: 0; }
-form.im-side-foot label { display: flex; flex: 1; align-items: center; gap: 12px; height: 100%; margin: 0; padding: 0 20px; cursor: pointer;
-  color: var(--vk-text); font-size: 14px; line-height: 18px; }
-form.im-side-foot + .im-side-foot, .im-side-foot + form.im-side-foot { border-top: 0; }
 
 .im-main { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .im-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 100%; color: var(--vk-text-2);

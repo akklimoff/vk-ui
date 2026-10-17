@@ -1,5 +1,5 @@
 {% from "partials/im_icons.html" import icon %}
-<div class="im" x-data="im({{ sel or 'null' }}, {{ 'true' if mark_read else 'false' }})" :class="{ 'show-chat': pane === 'chat' }" @keydown.window="hotkey($event)">
+<div class="im" x-data="im({{ sel or 'null' }})" :class="{ 'show-chat': pane === 'chat' }" @keydown.window="hotkey($event)">
   <aside class="im-side">
     <header class="im-side-head">Мессенджер</header>
     <label class="im-search">{{ icon('search_outline_16') }}<input type="search" name="q" placeholder="Поиск" x-model="filter" x-ref="search" aria-label="Поиск по диалогам"
@@ -14,11 +14,6 @@
       </div>
     </div>
     <label class="im-side-foot">{{ icon('message_outline_20') }}<span>Только непрочитанные</span><input type="checkbox" role="switch" class="sw" x-model="unreadOnly"></label>
-    <form class="im-side-foot" hx-post="/im/read-marks" hx-trigger="change" hx-swap="none"
-          @htmx:after-request="if (!$event.detail.successful || $event.detail.xhr.status >= 300) markRead = !markRead">
-      <label title="Открытый чат не отмечается прочитанным: VK и собеседник не увидят, что вы его читали">{{ icon('check_double_outline_16') }}<span>Отмечать прочитанным</span>
-        <input type="checkbox" role="switch" class="sw" name="on" value="1" :checked="markRead" @change="markRead = $event.target.checked"></label>
-    </form>
   </aside>
   <section class="im-main" :class="{ loading }" @touchstart.passive="edgeFrom($event)" @touchend="edgeTo($event)">
     <div id="chat" class="im-chat-slot">{% if chat %}{% include "partials/im_chat.html" %}{% else %}{% include "partials/im_empty.html" %}{% endif %}</div>

@@ -23,8 +23,8 @@ function mmss(seconds) {
 }
 
 document.addEventListener("alpine:init", () => {
-  Alpine.data("im", (sel, markRead) => ({
-    sel, markRead, pane: sel ? "chat" : "list", filter: "", unreadOnly: false, loading: false,
+  Alpine.data("im", (sel) => ({
+    sel, pane: sel ? "chat" : "list", filter: "", unreadOnly: false, loading: false,
     question: "", confirmed: null, warmTimer: 0, warmedAt: {}, warming: false, deduping: false, edge: null,
     init() {
       this.$el.addEventListener("im-back", () => { this.pane = "list"; });
@@ -137,7 +137,7 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("chat", (peerId, outRead, unread) => ({
-    peerId, outRead, unread, fromBottom: 0, stick: true, readUpTo: 0, settling: false, panel: null, viewer: null,
+    peerId, outRead, unread, fromBottom: 0, stick: true, settling: false, panel: null, viewer: null,
     atBottom: true, pending: 0, before: 0, raf: 0, olderSwap: false, swipeFrom: 0, swiped: false,
     init() {
       // синхронно, а не в $nextTick: иначе IntersectionObserver успевает увидеть сентинел
@@ -165,7 +165,6 @@ document.addEventListener("alpine:init", () => {
           this.markStuck();
         }
       });
-      this.$nextTick(() => this.noteRead());
     },
     // afterSwap приходит на каждый вставленный элемент — разбираем ленту один раз за своп
     settleMessages() {
@@ -177,7 +176,6 @@ document.addEventListener("alpine:init", () => {
         if (this.$refs.list.querySelector("[data-id]")) this.$refs.list.querySelector(".im-empty")?.remove();
         if (this.stick) this.scrollBottom();
         else this.pending += this.arrived();
-        this.noteRead();
         this.markStuck();
       });
     },
@@ -201,17 +199,8 @@ document.addEventListener("alpine:init", () => {
         else prev = chip.textContent;
       });
     },
-    lastIncoming() {
-      return Math.max(0, ...[...this.$refs.list.querySelectorAll(".msg:not(.out)")].map((el) => Number(el.dataset.id)));
-    },
-    // markRead — настройка из runtime.json: выключена — открытый чат не отмечается прочитанным
-    noteRead() {
-      const last = this.lastIncoming();
-      if (last <= this.readUpTo || document.visibilityState !== "visible" || !this.markRead) return;
-      this.readNow(last);
-    },
-    readNow(last = this.lastIncoming()) {
-      this.readUpTo = last;
+    // мессенджер сам ничего прочитанным не отмечает: VK и собеседник видят прочтение только по этой кнопке
+    readNow() {
       fetch(`/im/${this.peerId}/read`, { method: "POST", headers: { "HX-Request": "true" } })
         .then((r) => { if (r.ok) this.unread = 0; });
     },

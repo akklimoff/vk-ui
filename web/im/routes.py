@@ -63,7 +63,7 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
         loaded = offset + len(dialogs)
         more = loaded if dialogs and loaded < min(int(raw.get("count", 0)), MAX_DIALOGS) else None
         return {"dialogs": [(d, bot_mode(d.peer.id, access, rt, vk().me_id)) for d in dialogs], "tz": tz,
-                "now": time.time(), "more": more, "mark_read": rt.mark_read}
+                "now": time.time(), "more": more}
 
     def history(peer_id: int, count: int, before: int | None):
         if before is None and count == PAGE:
@@ -145,17 +145,6 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
         return StreamingResponse(inbox_events(inbox, request.is_disconnected),
                                  media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
-    @router.post("/im/read-marks")
-    def read_marks(request: Request, on: str = Form("")):
-        try:
-            update_config(settings.runtime_file, lambda stored: {**stored, "mark_read": bool(on)})
-        except (ValueError, TypeError) as e:
-            return render.invalid(request, "im_error", {"page": "im"}, str(e))
-        if not is_hx(request):
-            return RedirectResponse("/im", status_code=303)
-        toast = "Открытые чаты отмечаются прочитанными" if on else "Открытые чаты не отмечаются прочитанными"
-        return Response(status_code=204, headers={"HX-Trigger": json.dumps({"toast": toast})})
 
     @router.get("/im/{peer_id}/messages")
     def messages_partial(request: Request, peer_id: int, after: int | None = None, before: int | None = None,
@@ -261,7 +250,7 @@ def create_router(settings, vk, render, safe_error) -> APIRouter:
         return {"peer_id": peer_id, "mode": bot_mode(peer_id, access, rt, vk().me_id),
                 "c": chat_controls(peer_id, access, rt, vk().me_id),
                 "members": members, "personas": list_personas(settings.personas_dir),
-                "active": rt.active_persona, "mark_read": rt.mark_read, "page": "im"}
+                "active": rt.active_persona, "page": "im"}
 
     def bot_panel(request: Request, peer_id: int, toast: str | None = None):
         if not is_hx(request):
