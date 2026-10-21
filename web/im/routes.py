@@ -4,9 +4,10 @@ import threading
 import time
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
+from web.im.archive import Archive
 from web.im.events import inbox_events
 from web.im.uploads import MAX_PHOTO_BYTES, MAX_PHOTOS, prepare_photos
 from web.im.views import (Message, Profiles, parse_conversations, parse_history, parse_media, parse_search, peer_of,
@@ -16,27 +17,46 @@ from web.render import is_hx
 
 DIALOGS = 60
 MAX_DIALOGS = 200
+VK_PAGE = 200
 SEARCH = 20
 PAGE = 40
 POLL_WINDOW = 50
 MEDIA_PAGE = 60
 MEDIA_TABS = {"photo": "Фото", "video": "Видео", "doc": "Файлы", "link": "Ссылки", "audio_message": "Голосовые"}
 WARM_TTL = 10.0
+# служебный аккаунт «ВКонтакте» (id100): уведомления о входах и безопасности
+NEVER_SHOWN = frozenset({100})
 
 
 def create_router(settings, vk, render, safe_error, inbox) -> APIRouter:
-    router = APIRouter()
     tz = ZoneInfo(settings.web_timezone)
+    archive = Archive(lambda: vk().archived_peers())
+
+    def hidden_peers(fresh: bool = False) -> frozenset[int]:
+        return archive.peers(fresh=fresh) | NEVER_SHOWN
     # ответ VK на открытие чата, запрошенный при наведении на диалог: клик забирает его, не дожидаясь VK;
     # версия переписки — на момент запроса: если с тех пор переписка менялась, ответ устарел
     warmed: dict[int, tuple[float, int, dict]] = {}
     warmed_lock = threading.Lock()
 
     def dialogs_ctx(count: int = DIALOGS, offset: int = 0):
-        raw = vk().conversations(count, offset)
-        dialogs = parse_conversations(raw, vk().me_id)
-        loaded = offset + len(dialogs)
-        more = loaded if dialogs and loaded < min(int(raw.get("count", 0)), MAX_DIALOGS) else None
+        """count — сколько диалогов показать, offset — с какой беседы VK начать. Архивные пропускаются, и VK
+        дочитывается, пока не наберётся count: иначе каждое обновление списка с count с экрана укорачивало бы его."""
+        hidden = hidden_peers(fresh=True)
+        dialogs, at, total = [], offset, 0
+        while len(dialogs) < count:
+            raw = vk().conversations(min(VK_PAGE, count - len(dialogs) + len(hidden)), at)
+            total = int(raw.get("count", 0))
+            page = parse_conversations(raw, vk().me_id)
+            for dialog in page:
+                at += 1
+                if dialog.peer.id not in hidden:
+                    dialogs.append(dialog)
+                    if len(dialogs) == count:
+                        break
+            if not page or at >= total:
+                break
+        more = at if dialogs and at < min(total, MAX_DIALOGS) else None
         return {"dialogs": dialogs, "tz": tz, "now": time.time(), "more": more}
 
     def history(peer_id: int, count: int, before: int | None):
@@ -75,6 +95,15 @@ def create_router(settings, vk, render, safe_error, inbox) -> APIRouter:
         except Exception as e:
             raise HTTPException(502, f"VK: {safe_error(e)}")
 
+    def refuse_hidden(request: Request):
+        asked = request.path_params.get("peer_id", request.query_params.get("sel"))
+        if asked is None or not str(asked).lstrip("-").isdecimal():
+            return
+        if int(asked) in guard(hidden_peers):
+            raise HTTPException(404, "Чат скрыт")
+
+    router = APIRouter(dependencies=[Depends(refuse_hidden)])
+
     def send_form_error(request: Request, error: str):
         return render.invalid(request, "im_error", {"page": "im"}, error)
 
@@ -109,6 +138,8 @@ def create_router(settings, vk, render, safe_error, inbox) -> APIRouter:
         if not q:
             return render.partial(request, "im_search", {"page": "im", "dialogs": [], "q": ""})
         found = parse_search(guard(lambda: vk().search_conversations(q, SEARCH)), vk().me_id)
+        hidden = guard(hidden_peers)
+        found = [d for d in found if d.peer.id not in hidden]
         return render.partial(request, "im_search", {"page": "im", "q": q, "tz": tz, "now": time.time(),
                                                      "dialogs": found})
 

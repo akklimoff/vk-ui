@@ -5,8 +5,13 @@ class FakeVk:
     me_id = ME
 
     def __init__(self, token):
+        self.archived = frozenset()
         self.calls = []
         self.sent = False
+
+    def archived_peers(self):
+        self.calls.append(("archive",))
+        return self.archived
 
     def conversations(self, count=60, offset=0):
         self.calls.append(("conversations", count, offset))

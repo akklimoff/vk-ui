@@ -10,6 +10,7 @@ from vk_api.utils import get_random_id
 log = logging.getLogger("vk-ui")
 
 PROFILE_FIELDS = "photo_50,photo_100,online,last_seen,sex,screen_name"
+ARCHIVE_PAGE = 200
 
 
 def voice_attachment(saved: dict) -> str:
@@ -92,6 +93,16 @@ class VkClient:
 
     def conversations(self, count: int = 60, offset: int = 0) -> dict:
         return self.api.messages.getConversations(count=count, offset=offset, extended=1, fields=PROFILE_FIELDS)
+
+    def archived_peers(self) -> frozenset[int]:
+        peers, offset = set(), 0
+        while True:
+            raw = self.api.messages.getConversations(filter="archive", count=ARCHIVE_PAGE, offset=offset)
+            items = raw.get("items") or []
+            peers |= {item["conversation"]["peer"]["id"] for item in items}
+            offset += len(items)
+            if not items or offset >= int(raw.get("count", 0)):
+                return frozenset(peers)
 
     def history_page(self, peer_id: int, count: int, before_id: int | None = None) -> dict:
         params = dict(peer_id=peer_id, count=count, extended=1, fields=PROFILE_FIELDS)

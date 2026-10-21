@@ -234,3 +234,23 @@ def test_photos_for_a_message_go_to_vk_one_per_upload():
     sent = client.upload_photos(2000000001, [(b"one", "png"), (b"two", "jpg")])
     assert client._upload.seen == [("photo.png", b"one", 2000000001), ("photo.jpg", b"two", 2000000001)]
     assert sent == ["photo7_1_k", "photo7_2"]
+
+
+def test_archived_peers_are_read_page_by_page_through_the_archive_filter():
+    class ArchiveApi(FakeApi):
+        def getConversations(self, **params):
+            self.sent.append(params)
+            start = params["offset"]
+            peers = [2000000001, 22, -5][start:start + params["count"]]
+            return {"count": 3, "items": [{"conversation": {"peer": {"id": p}}} for p in peers]}
+
+    import web.vk
+
+    client = client_with(FakeSession())
+    client.api = ArchiveApi()
+    original, web.vk.ARCHIVE_PAGE = web.vk.ARCHIVE_PAGE, 2
+    try:
+        assert client.archived_peers() == {2000000001, 22, -5}
+    finally:
+        web.vk.ARCHIVE_PAGE = original
+    assert [(p["filter"], p["offset"]) for p in client.api.sent] == [("archive", 0), ("archive", 2)]

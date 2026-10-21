@@ -8,6 +8,7 @@ from tests.web.conftest import AUTH
 from tests.web.fakes import FakeVk
 from tests.web.im_fixtures import CONVERSATIONS, HISTORY, PEER_CHAT, PEER_USER, UPLOADED_VOICE
 from web.app import create_app
+from web.im.routes import NEVER_SHOWN
 
 
 @pytest.fixture
@@ -349,21 +350,87 @@ def test_unchanged_dialog_list_answers_204(client):
     version = first.headers["X-Dialogs-Version"]
     again = client.get(f"/im/dialogs?count=2&v={version}", auth=AUTH, headers=hx)
     assert again.status_code == 204
-    assert ("conversations", 2, 0) in client.app.state.vk.calls
+    assert ("conversations", 2 + len(NEVER_SHOWN), 0) in client.app.state.vk.calls
     assert client.get("/im/dialogs?count=5000", auth=AUTH, headers=hx).status_code == 200
     assert ("conversations", 200, 0) in client.app.state.vk.calls
 
 
+def chats(total):
+    """total бесед VK: пачками по offset и count, как отдаёт getConversations."""
+    items = [{"conversation": {"peer": {"id": PEER_CHAT + i, "type": "chat", "local_id": 1 + i},
+                               "chat_settings": {"title": f"беседа-{i}", "members_count": 3}}}
+             for i in range(total)]
+
+    def conversations(count=60, offset=0):
+        return {"count": total, "items": items[offset:offset + count], "profiles": [], "groups": []}
+
+    return conversations
+
+
+def shown_peers(html):
+    return [int(p) for p in re.findall(r'<li class="dlg[^"]*" data-peer="(\d+)"', html)]
+
+
 def test_more_dialogs_page_on_while_vk_has_them(client):
     client.app.state.vk = FakeVk("t")
-    client.app.state.vk.conversations = lambda count=60, offset=0: {**CONVERSATIONS, "count": 150}
+    client.app.state.vk.conversations = chats(150)
     r = client.get("/im/dialogs", auth=AUTH, headers={"HX-Request": "true"})
-    assert 'hx-get="/im/dialogs/more?offset=2"' in r.text
+    assert len(shown_peers(r.text)) == 60 and 'hx-get="/im/dialogs/more?offset=60"' in r.text
     sentinel = r.text.split('class="dlg-more"')[1].split(">")[0]
     assert 'hx-target="this"' in sentinel and 'hx-swap="outerHTML"' in sentinel
-    client.app.state.vk.conversations = lambda count=60, offset=0: {**CONVERSATIONS, "count": 4}
-    more = client.get("/im/dialogs/more?offset=2", auth=AUTH, headers={"HX-Request": "true"})
-    assert "dlg-more" not in more.text and "лампочки" in more.text
+    client.app.state.vk.conversations = chats(62)
+    more = client.get("/im/dialogs/more?offset=60", auth=AUTH, headers={"HX-Request": "true"})
+    assert "dlg-more" not in more.text and shown_peers(more.text) == [PEER_CHAT + 60, PEER_CHAT + 61]
+
+
+def test_archived_chats_never_show_in_the_list_and_it_does_not_shrink(client):
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.conversations = chats(150)
+    client.app.state.vk.archived = frozenset({PEER_CHAT, PEER_CHAT + 5, PEER_CHAT + 61})
+    hx = {"HX-Request": "true"}
+    first = shown_peers(client.get("/im/dialogs", auth=AUTH, headers=hx).text)
+    assert len(first) == 60 and not set(first) & client.app.state.vk.archived
+    r = client.get("/im/dialogs?count=60", auth=AUTH, headers=hx)
+    assert shown_peers(r.text) == first and 'hx-get="/im/dialogs/more?offset=63"' in r.text
+    more = shown_peers(client.get("/im/dialogs/more?offset=63", auth=AUTH, headers=hx).text)
+    assert more[0] == PEER_CHAT + 63 and not set(more) & client.app.state.vk.archived
+
+
+def test_archived_chats_never_show_in_search_and_never_open(client):
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.archived = frozenset({PEER_USER, PEER_CHAT})
+    hx = {"HX-Request": "true"}
+    assert "data-peer" not in client.get("/im/dialogs", auth=AUTH, headers=hx).text
+    assert "data-peer" not in client.get("/im/dialogs/search?q=аня", auth=AUTH, headers=hx).text
+    for url in (f"/im?sel={PEER_CHAT}", f"/im/{PEER_CHAT}", f"/im/{PEER_CHAT}/messages?after=500",
+                f"/im/{PEER_CHAT}/media"):
+        assert client.get(url, auth=AUTH, headers=hx).status_code == 404, url
+    sent = client.post(f"/im/{PEER_CHAT}/send", data={"text": "x"}, auth=AUTH, headers=hx)
+    assert sent.status_code == 404 and not [c for c in client.app.state.vk.calls if c[0] in ("send", "history")]
+    assert client.get("/im", auth=AUTH).status_code == 200
+
+
+def test_the_official_vk_account_never_shows(client):
+    service = {"conversation": {"peer": {"id": 100, "type": "user", "local_id": 100}},
+               "last_message": {"id": 9, "date": 1788876240, "peer_id": 100, "from_id": 100, "out": 0,
+                                "text": "Совершён вход в ваш аккаунт", "attachments": []}}
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.conversations = lambda count=60, offset=0: {
+        **CONVERSATIONS, "count": 3, "items": [service, *CONVERSATIONS["items"]][offset:offset + count]}
+    hx = {"HX-Request": "true"}
+    r = client.get("/im/dialogs", auth=AUTH, headers=hx)
+    assert shown_peers(r.text) == [PEER_CHAT, PEER_USER] and "Совершён вход" not in r.text
+    for url in ("/im?sel=100", "/im/100", "/im/100/messages?after=1", "/im/100/media"):
+        assert client.get(url, auth=AUTH, headers=hx).status_code == 404, url
+
+
+def test_the_archive_is_asked_once_per_list_and_cached_for_chats(client):
+    hx = {"HX-Request": "true"}
+    client.get("/im/dialogs", auth=AUTH, headers=hx)
+    client.get("/im/dialogs", auth=AUTH, headers=hx)
+    for _ in range(3):
+        client.get(f"/im/{PEER_CHAT}/messages?after=502", auth=AUTH, headers=hx)
+    assert client.app.state.vk.calls.count(("archive",)) == 2
 
 
 def test_search_reaches_chats_beyond_the_loaded_list(client):
@@ -399,7 +466,7 @@ def test_hovered_chat_opens_from_the_warmed_history(client):
 def test_more_dialogs_stop_at_the_cap(client):
     hx = {"HX-Request": "true"}
     client.get("/im/dialogs/more?offset=180", auth=AUTH, headers=hx)
-    assert ("conversations", 20, 180) in client.app.state.vk.calls
+    assert ("conversations", 20 + len(NEVER_SHOWN), 180) in client.app.state.vk.calls
     r = client.get("/im/dialogs/more?offset=200", auth=AUTH, headers=hx)
     assert r.status_code == 200 and "dlg" not in r.text
     assert not [c for c in client.app.state.vk.calls if c[0] == "conversations" and c[2] == 200]
