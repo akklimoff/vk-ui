@@ -147,7 +147,7 @@ def test_a_forged_cookie_is_not_a_session(client):
 
 
 def test_after_login_the_visitor_is_returned_only_inside_the_site():
-    assert safe_next("/journal?page=2") == "/journal?page=2"
+    assert safe_next("/im?sel=2") == "/im?sel=2"
     for target in ("https://evil.example", "//evil.example", "/\\evil.example", "javascript:alert(1)", "", None,
                    "/a\nb"):
         assert safe_next(target) == "/"

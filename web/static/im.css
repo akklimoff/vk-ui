@@ -53,8 +53,8 @@ body.page-im {
 .vk-nav form { margin: 0; }
 .vk-nav button { display: flex; align-items: center; gap: 10px; width: 100%; height: 30px; margin: 0; padding: 0 6px; border: 0; border-radius: 4px;
   background: none; color: var(--vk-text); font-size: 13px; line-height: 16px; box-shadow: none; cursor: pointer; }
-.vk-nav button .ico { color: var(--vk-icon); }
 .vk-nav button:hover { background: var(--vk-hover); }
+.vk-nav button:focus-visible { outline: 2px solid var(--vk-accent); outline-offset: -2px; }
 .vk-nav a[aria-current] { background: var(--vk-active); }
 main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-width: none; min-width: 0; }
 .im { display: grid; grid-template-columns: 319px minmax(0, 1fr); height: calc(100vh - 80px); background: var(--vk-content); border-radius: 12px; overflow: hidden; }

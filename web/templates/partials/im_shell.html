@@ -8,7 +8,7 @@
   <nav class="vk-nav" :class="{ open: drawer }" aria-label="Разделы">
     <ul>{% for item in nav %}
       <li><a href="{{ item.href }}" {% if page == item.key %}aria-current="page"{% endif %}>{{ icon(item.icon) }}{{ item.title }}</a></li>{% endfor %}
-      <li><form method="post" action="/logout"><button type="submit">{{ icon('cancel_20') }}Выйти</button></form></li>
+      <li><form method="post" action="/logout"><button type="submit">Выйти</button></form></li>
     </ul>
   </nav>
 </div>
