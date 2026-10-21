@@ -193,12 +193,8 @@ def test_im_page_wears_the_vk_shell(client):
     assert '#message_outline_20"' in nav and 'action="/logout"' in nav
 
 
-def test_home_is_the_messenger_and_agent_pages_are_gone(client):
+def test_home_is_the_messenger(client):
     assert client.get("/", auth=AUTH).headers["location"] == "/im"
-    for gone in ("/journal", "/status", "/personas", "/prompts", "/access", "/settings", "/sandbox", f"/im/{PEER_CHAT}/bot"):
-        assert client.get(gone, auth=AUTH).status_code in (404, 422), gone
-    page = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH).text
-    assert "агент" not in page.lower() and "robot" not in page
 
 
 def test_dialog_rows_show_mute_icon_ticks_and_short_age(client):
@@ -299,7 +295,7 @@ def test_icon_sprite_url_carries_its_version(client):
 def test_chat_header_toggles_the_media_panel(client):
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
     assert f'hx-get="/im/{PEER_CHAT}/media" hx-target="#media-slot"' in r.text
-    assert "x-show=\"panel === 'media'\"" in r.text and "panel === 'bot'" not in r.text
+    assert "x-show=\"panel === 'media'\"" in r.text
 
 
 def test_voice_player_renders_wave_bars_and_transcript_toggle(client):

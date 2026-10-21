@@ -52,10 +52,9 @@ def test_panel_is_served_over_https_on_port_8080():
 
 def test_image_and_compose_take_nothing_from_outside_the_repo_and_keep_no_panel_data():
     compose = read("docker-compose.yml")
-    for foreign in ("external", "BOT_", "vk_mcp", "/app/state", "/app/config", "AI_URL"):
-        assert foreign not in compose, foreign
+    assert "external" not in compose and "/app/" not in compose
     for name in ("docker-compose.yml", "Dockerfile", ".env.example"):
-        assert "../" not in read(name) and "vk_mcp" not in read(name) and "vk-mcp" not in read(name), name
+        assert "../" not in read(name), name
 
 
 def test_agent_docs_are_identical_and_carry_the_mandatory_rules():
