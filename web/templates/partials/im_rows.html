@@ -8,8 +8,7 @@
 <article class="msg {{ 'head' if r.head }} {{ 'out' if m.out }}" data-id="{{ m.id }}" data-from="{{ m.from_id }}" data-ts="{{ m.ts }}">
   {% if r.head %}<a class="ava a36" href="{{ profile(m.from_id) }}" target="_blank" rel="noopener">{% if m.photo %}<img src="{{ m.photo }}" alt="">{% else %}<i>{{ m.author[:1] }}</i>{% endif %}</a>{% endif %}
   <span class="info">{% if m.out %}<span class="ticks" :class="{ read: {{ m.id }} <= outRead }">{{ icon('check_outline_16', 'one') }}{{ icon('check_double_outline_16', 'two') }}</span>{% endif %}<time>{{ m.ts|clock(tz) }}</time></span>
-  {% if r.head %}<div class="name"><a href="{{ profile(m.from_id) }}" target="_blank" rel="noopener">{{ m.author }}</a>{% if m.bot %}<span class="badge-mode">бот · {{ m.bot.persona }}{% if m.bot.model %} · {{ m.bot.model }}{% endif %}</span>{% endif %}</div>
-  {% elif m.bot %}<div class="name"><span class="badge-mode">бот · {{ m.bot.persona }}</span></div>{% endif %}
+  {% if r.head %}<div class="name"><a href="{{ profile(m.from_id) }}" target="_blank" rel="noopener">{{ m.author }}</a></div>{% endif %}
   {% if m.reply %}<blockquote class="quote"><b>{{ m.reply.author }}</b><span>{{ m.reply.text }}</span></blockquote>{% endif %}
   {% if m.text %}<p class="text">{{ m.text }}</p>{% endif %}
   {{ attachments(m.attachments, m.id, c.now, tz) }}

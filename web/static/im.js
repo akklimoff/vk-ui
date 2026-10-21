@@ -12,7 +12,7 @@ function dialogsState() {
   return { count: Math.max(1, list.querySelectorAll(":scope > li.dlg").length), v: list.dataset.version || "" };
 }
 
-// пока открыт поток событий бота, частый поллинг не нужен: новое приходит сигналом, редкий тик — подстраховка
+// пока открыт поток событий long poll, частый поллинг не нужен: новое приходит сигналом, редкий тик — подстраховка
 function imLive() {
   return window.imEvents?.readyState === EventSource.OPEN;
 }

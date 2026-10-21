@@ -5,72 +5,22 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.web.conftest import AUTH
-from tests.web.fakes import FakeAi
-from tests.web.im_fixtures import CONVERSATIONS, HISTORY, MEMBERS, ME, PEER_CHAT, PEER_USER, SENT, UPLOADED_VOICE
+from tests.web.fakes import FakeVk
+from tests.web.im_fixtures import CONVERSATIONS, HISTORY, PEER_CHAT, PEER_USER, UPLOADED_VOICE
 from web.app import create_app
-
-
-class FakeVk:
-    me_id = ME
-
-    def __init__(self, token):
-        self.calls = []
-        self.sent = False
-
-    def conversations(self, count=60, offset=0):
-        self.calls.append(("conversations", count, offset))
-        return CONVERSATIONS
-
-    def history_page(self, peer_id, count, before_id=None):
-        self.calls.append(("history", peer_id, count, before_id))
-        return {**HISTORY, "items": SENT["items"] + HISTORY["items"]} if self.sent else HISTORY
-
-    def members(self, peer_id):
-        return MEMBERS
-
-    def send(self, peer_id, text="", reply_to=None, attachment=""):
-        self.calls.append(("send", peer_id, text, reply_to, attachment))
-        self.sent = True
-        return 503
-
-    def mark_read(self, peer_id):
-        self.calls.append(("read", peer_id))
-
-    def delete_message(self, message_id):
-        self.calls.append(("delete", message_id))
-
-    def upload_photos(self, peer_id, photos):
-        self.calls.append(("photos", peer_id, [ext for _, ext in photos]))
-        return [f"photo1_{i}_key" for i, _ in enumerate(photos)]
-
-    def search_conversations(self, query, count):
-        self.calls.append(("search", query, count))
-        return {"count": 1, "items": [CONVERSATIONS["items"][1]["conversation"]], "profiles": CONVERSATIONS["profiles"]}
-
-    def upload_voice(self, peer_id, data, ext):
-        self.calls.append(("voice", peer_id, len(data), ext))
-        return "audio_message1_8_abc"
-
-    def resolve_name(self, uid):
-        return "Вася Пупкин"
-
-    def resolve_screen_names(self, names):
-        return frozenset()
 
 
 @pytest.fixture
 def client(settings):
-    open(f"{settings.personas_dir}/rina.md", "w").write("# Рина\nперсона")
-    return TestClient(create_app(settings, vk_factory=FakeVk, ai_factory=FakeAi), follow_redirects=False)
+    return TestClient(create_app(settings, vk_factory=FakeVk), follow_redirects=False)
 
 
-def test_im_page_lists_dialogs_with_modes(client):
+def test_im_page_lists_dialogs(client):
     r = client.get("/im", auth=AUTH)
     assert r.status_code == 200
     assert "лампочки" in r.text and "Аня Иванова" in r.text
     assert "Стикер" in r.text                       # превью последнего сообщения
     assert 'class="unread quiet">2<' in r.text          # беседа в фикстуре без звука
-    assert r.text.count("не слушает") >= 2           # бейдж у каждого диалога: ни один чат не в доверенных
     assert 'href="/im"' in r.text and "Мессенджер" in r.text
 
 
@@ -92,17 +42,6 @@ def test_chat_partial_for_htmx_pushes_url(client):
     assert r.status_code == 200
     assert r.headers["HX-Push-Url"] == f"/im?sel={PEER_CHAT}"
     assert "<nav" not in r.text and 'id="messages"' in r.text
-
-
-def test_chat_marks_bot_replies(client, settings):
-    from bot.agent.journal import ActionLog, ActionRecord
-
-    ActionLog(f"{settings.state_dir}/actions.jsonl").append(ActionRecord(
-        ts=1, peer_id=PEER_CHAT, from_id=11, role="trusted", place="chat", message_id=500, request="просьба",
-        calls=(), outcome="replied", reply="ну все тогда", reply_message_ids=(501,), steps=1, duration_s=1.0,
-        model="grok-4.6", prompt_tokens=1, completion_tokens=1, persona="rina"))
-    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
-    assert "бот · rina" in r.text
 
 
 def test_dialogs_partial(client):
@@ -251,13 +190,15 @@ def test_im_page_wears_the_vk_shell(client):
     assert 'class="page-im"' in r.text
     nav = r.text.split('class="vk-nav"')[1].split("</nav>")[0]
     assert 'aria-current="page"' in nav.split("Мессенджер")[0]
-    assert '#message_outline_20"' in nav and '#robot_outline_20"' in nav
-    assert 'class="topnav"' not in r.text
+    assert '#message_outline_20"' in nav and 'action="/logout"' in nav
 
 
-def test_other_pages_keep_the_plain_nav(client):
-    r = client.get("/", auth=AUTH)
-    assert 'class="topnav"' in r.text and "vk-nav" not in r.text and 'href="/im"' in r.text
+def test_home_is_the_messenger_and_agent_pages_are_gone(client):
+    assert client.get("/", auth=AUTH).headers["location"] == "/im"
+    for gone in ("/journal", "/status", "/personas", "/prompts", "/access", "/settings", "/sandbox", f"/im/{PEER_CHAT}/bot"):
+        assert client.get(gone, auth=AUTH).status_code in (404, 422), gone
+    page = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH).text
+    assert "агент" not in page.lower() and "robot" not in page
 
 
 def test_dialog_rows_show_mute_icon_ticks_and_short_age(client):
@@ -355,10 +296,10 @@ def test_icon_sprite_url_carries_its_version(client):
     assert "/static/vk-icons.svg#" not in r.text
 
 
-def test_chat_header_toggles_photos_and_bot_panels(client):
+def test_chat_header_toggles_the_media_panel(client):
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
     assert f'hx-get="/im/{PEER_CHAT}/media" hx-target="#media-slot"' in r.text
-    assert "x-show=\"panel === 'media'\"" in r.text and "x-show=\"panel === 'bot'\"" in r.text
+    assert "x-show=\"panel === 'media'\"" in r.text and "panel === 'bot'" not in r.text
 
 
 def test_voice_player_renders_wave_bars_and_transcript_toggle(client):
@@ -468,16 +409,19 @@ def test_more_dialogs_stop_at_the_cap(client):
     assert not [c for c in client.app.state.vk.calls if c[0] == "conversations" and c[2] == 200]
 
 
-def test_warmed_history_is_dropped_once_the_bot_saw_new_messages(client, settings):
-    import os
+def test_warmed_history_is_dropped_once_long_poll_saw_new_messages(client):
     hx = {"HX-Request": "true"}
-    inbox = f"{settings.state_dir}/inbox.json"
-    os.makedirs(settings.state_dir, exist_ok=True)
-    open(inbox, "w").write('{"at": 1}')
     client.post(f"/im/{PEER_CHAT}/warm", auth=AUTH, headers=hx)
-    os.utime(inbox, ns=(os.stat(inbox).st_mtime_ns + 10**9,) * 2)
+    client.app.state.inbox.changed()
     client.get(f"/im/{PEER_CHAT}", auth=AUTH, headers=hx)
     assert len([c for c in client.app.state.vk.calls if c[0] == "history"]) == 2
+
+
+def test_warmed_history_is_reused_while_nothing_changed(client):
+    hx = {"HX-Request": "true"}
+    client.post(f"/im/{PEER_CHAT}/warm", auth=AUTH, headers=hx)
+    client.get(f"/im/{PEER_CHAT}", auth=AUTH, headers=hx)
+    assert len([c for c in client.app.state.vk.calls if c[0] == "history"]) == 1
 
 
 def test_voice_with_photos_is_refused_before_any_upload(client):

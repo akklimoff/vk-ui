@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
-<title>vk-bot</title>
+<title>vk-ui</title>
 <link rel="stylesheet" href="{{ asset('pico.min.css') }}">
 <link rel="stylesheet" href="{{ asset('app.css') }}">
 <link rel="stylesheet" href="{{ asset('im.css') }}">
@@ -15,12 +15,7 @@
 <script defer src="{{ asset('alpine.min.js') }}"></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
-{% block nav %}<nav class="topnav" aria-label="Разделы">
-  <ul>{% for item in nav %}
-    <li><a href="{{ item.href }}" {% if page == item.key %}aria-current="page"{% endif %}>{{ item.title }}</a></li>{% endfor %}
-  </ul>
-  <form class="logout" method="post" action="/logout"><button type="submit">Выйти</button></form>
-</nav>{% endblock %}
+{% block nav %}{% endblock %}
 <main class="{% block main_class %}container{% endblock %}">{% block body %}{% endblock %}</main>
 <div class="toasts" x-data aria-live="polite">
   <template x-for="t in $store.toasts.items" :key="t.id">

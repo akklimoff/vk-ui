@@ -8,7 +8,7 @@
       <button type="button" class="ib back" @click="$dispatch('im-back')" aria-label="Назад">{{ icon('chevron_left_24') }}</button>
       <span class="ava a32">{% if c.peer and c.peer.photo %}<img src="{{ c.peer.photo }}" alt="">{% elif c.peer %}<i>{{ c.peer.title[:1] }}</i>{% endif %}</span>
       <span class="body">
-        <span class="line"><b>{{ c.peer.title if c.peer else c.peer_id|peer_label }}</b><span id="chat-badge">{% with m = c.mode %}{% include "partials/im_badge.html" %}{% endwith %}</span></span>
+        <span class="line"><b>{{ c.peer.title if c.peer else c.peer_id|peer_label }}</b></span>
         <small>{% if c.peer and c.peer.kind == 'chat' %}{{ c.peer.members|plural('участник', 'участника', 'участников') }}{% elif c.peer and c.peer.kind == 'group' %}сообщество{% elif c.peer %}{{ c.peer|presence(c.now, c.tz) }}{% endif %}</small>
       </span>
       <button type="button" class="ib read-now" x-show="unread" x-cloak @click="readNow()"
@@ -17,9 +17,6 @@
       <button type="button" class="ib" title="Вложения чата" aria-label="Вложения чата" :class="{ on: panel === 'media' }"
               @click="panel = panel === 'media' ? null : 'media'"
               hx-get="/im/{{ c.peer_id }}/media" hx-target="#media-slot" hx-swap="innerHTML" hx-trigger="click once">{{ icon('picture_outline_24') }}</button>
-      <button type="button" class="ib" title="Агент в этом чате" aria-label="Агент в этом чате" :class="{ on: panel === 'bot' }"
-              @click="panel = panel === 'bot' ? null : 'bot'"
-              hx-get="/im/{{ c.peer_id }}/bot" hx-target="#bot-slot" hx-swap="innerHTML" hx-trigger="click once">{{ icon('robot_outline_24') }}</button>
     </header>
     <div class="im-history">
       <div id="messages" class="im-messages" x-ref="list" data-gallery @scroll.passive="onScroll()">
@@ -58,8 +55,7 @@
       </div>
     </form>
   </div>
-  <div id="bot-slot" class="im-bot-slot" x-show="panel === 'bot'" x-cloak></div>
-  <div id="media-slot" class="im-bot-slot" x-show="panel === 'media'" x-cloak></div>
+  <div id="media-slot" class="im-panel-slot" x-show="panel === 'media'" x-cloak></div>
   <div class="im-viewer" x-show="viewer" x-cloak @click.self="swiped ? swiped = false : viewer = null" @keydown.escape.window="viewer = null"
        @keydown.arrow-left.window="typing($event) || step(-1)" @keydown.arrow-right.window="typing($event) || step(1)"
        @pointerdown="swipeFrom = $event.clientX; swiped = false" @pointerup="swipe($event.clientX)">

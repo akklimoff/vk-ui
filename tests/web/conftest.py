@@ -1,33 +1,18 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from ai.config import AiSettings
-from ai.service import AiService
-from bot.config import Settings
+from tests.web.fakes import FakeVk
 from web.app import create_app
+from web.config import Settings
 
 AUTH = ("admin", "pw")
 
 
 @pytest.fixture
-def settings(tmp_path):
-    (tmp_path / "config" / "personas").mkdir(parents=True)
-    return Settings(
-        vk_token="vk", web_password="pw",
-        access_file=str(tmp_path / "config" / "access.json"),
-        runtime_file=str(tmp_path / "config" / "runtime.json"),
-        personas_dir=str(tmp_path / "config" / "personas"),
-        state_dir=str(tmp_path / "state"),
-        _env_file=None,
-    )
+def settings():
+    return Settings(vk_token="vk", web_password="pw", _env_file=None)
 
 
 @pytest.fixture
-def ai_settings(settings):
-    return AiSettings(llm_api_key="k", anthropic_api_key="sk-ant-k", personas_dir=settings.personas_dir,
-                      _env_file=None)
-
-
-@pytest.fixture
-def client(settings, ai_settings):
-    return TestClient(create_app(settings, ai_factory=lambda s: AiService(ai_settings)), follow_redirects=False)
+def client(settings):
+    return TestClient(create_app(settings, vk_factory=FakeVk), follow_redirects=False)

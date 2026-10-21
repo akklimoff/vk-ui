@@ -2,8 +2,6 @@ fastapi
 uvicorn
 jinja2
 python-multipart
-httpx
 vk_api
 requests
-openai
 pydantic-settings

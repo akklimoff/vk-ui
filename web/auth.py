@@ -11,7 +11,7 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import RedirectResponse, Response
 from fastapi.security.utils import get_authorization_scheme_param
 
-SESSION_COOKIE = "vk_mcp_session"
+SESSION_COOKIE = "vk_ui_session"
 # браузеры не хранят cookie дольше 400 дней, поэтому срок продлевается при каждом заходе
 SESSION_SECONDS = 400 * 24 * 3600
 LOGIN_PATH = "/login"
@@ -60,7 +60,7 @@ class LoginLimiter:
 def session_token(password: str) -> str:
     """Значение cookie входа: выводится из пароля, поэтому переживает перезапуск и гаснет при смене пароля."""
     key = hashlib.sha256(password.encode()).digest()
-    return hmac.new(key, b"vk-mcp admin session v1", hashlib.sha256).hexdigest()
+    return hmac.new(key, b"vk-ui session v1", hashlib.sha256).hexdigest()
 
 
 def client_ip(request: Request) -> str:
@@ -91,7 +91,7 @@ def basic_password(request: Request) -> str | None:
 
 
 class Auth:
-    """Вход в админку: форма с паролем выдаёт бессрочную cookie; Basic Auth остаётся для скриптов."""
+    """Вход в панель: форма с паролем выдаёт бессрочную cookie; Basic Auth остаётся для скриптов."""
 
     def __init__(self, password: str, limiter: LoginLimiter | None = None):
         self._password = password

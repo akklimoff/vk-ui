@@ -52,13 +52,6 @@ HISTORY = {
     "conversations": [CONVERSATIONS["items"][0]["conversation"]],
 }
 
-MEMBERS = {
-    "count": 3,
-    "items": [{"member_id": ME, "is_owner": True}, {"member_id": 11, "is_admin": True}, {"member_id": 22}],
-    "profiles": CONVERSATIONS["profiles"],
-    "groups": [],
-}
-
 SENT = {"items": [{"id": 503, "date": 1788876300, "peer_id": PEER_CHAT, "from_id": ME, "out": 1,
                    "text": "привет из админки", "attachments": []}],
         "profiles": CONVERSATIONS["profiles"], "groups": []}

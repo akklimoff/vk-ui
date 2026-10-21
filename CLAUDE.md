@@ -1,63 +1,38 @@
 # vk-ui
 
-Веб-панель агента ВКонтакте [vk-mcp](https://github.com/akklimoff/vk_mcp): статус бота, персоны, промпт, настройки,
-доверие, журнал действий, песочница и мессенджер `/im`. Отдельный сервис со своим образом и своим репозиторием;
-от vk-mcp не зависит ни кодом, ни сборкой: нужное панели ядро агента лежит здесь. С ботом делит только данные —
-его `config/` (панель правит), `state/` (панель читает) и docker-сеть, где виден сервис `ai`.
+Веб-мессенджер аккаунта ВКонтакте (`/im`) — голый UI поверх API VK. Агентов, LLM, ИИ и бота (vk-mcp) здесь нет
+и быть не должно; общих с ними файлов, сетей и сервисов тоже. Панель ничего не хранит: ни на диске, ни в базе.
 
 Репозиторий публичный: в коммиты не попадают реальные id, ники, имена, адреса серверов и секреты.
 
 ## Архитектура
 
-- Три слоя с однонаправленными зависимостями: `web/` → `ai/`, `bot/` → `common/`. Граница проверяется
-  `tests/test_boundaries.py`.
-- `bot/`, `ai/`, `common/` — ядро агента, снимок vk-mcp 4e0382a (2026-10-18), с его тестами в `tests/`; теперь это код
-  vk-ui, но форматы файлов и решения в нём — контракт с ботом: `config/access.json` (`bot/access.py`),
-  `config/runtime.json` (`bot/runtime.py`), `config/personas/*.md` (`ai/personas.py`), `state/status.json`,
-  `inbox.json`, `pending.json` (`bot/status.py`), `state/actions.jsonl` (`bot/agent/journal.py`),
-  `state/rejections.json` (`bot/agent/rejections.py`) и фильтр `bot/agent/gate.py`, по которому панель судит, слушает
-  ли агент чат. Менять их можно только вместе с ботом, иначе панель прочитает его файлы неверно.
-  Самого бота здесь нет и быть не должно: ни long poll (`bot/main.py`), ни очереди просьб (`bot/agent/worker.py`),
-  ни HTTP-сервиса ИИ (`ai/http.py`) — тест границ это проверяет.
-- Что панель берёт из ядра — явный список `CORE_FOR_PANEL` в `tests/test_boundaries.py`: форматы файлов, решения
-  агента (`gate`, `limits.mention_of`, `loop.Limits`) и исполнение (`bot.vk.VkClient`, цикл `bot.agent.loop.run`
-  с `request`, `pictures`, `reply` для песочницы, `ai.client`, `ai.catalog`, `bot.config.Settings`, `common.redact`).
-  Из `ai/` панель и ядро берут только `contract`, `catalog`, `personas`, `client`; `ai.service`, `ai.llm`, `ai.claude`
-  нужны, чтобы без `AI_URL` LLM работал в процессе (так же работают тесты). Ключи и промпты LLM — только
-  в `ai.config.AiSettings`; `bot.config.Settings` их не знает. `openai` импортируется только в `ai/llm.py`,
-  `vk_api` — только в `bot/vk.py`.
-- FastAPI + Jinja2 + htmx + Alpine.js + Pico.css, библиотеки вендорятся в `web/static`, сборки фронта нет. Любая
-  новая настройка идёт через `config/`, а не через общую память с ботом.
+- Один пакет `web/`. `vk_api` импортируется только в `web/vk.py` (`VkClient` с long poll), SDK LLM — нигде;
+  каталогов `ai/`, `bot/`, `common/`, `config/` нет. Это проверяет `tests/test_boundaries.py`.
+- Настройки — только `.env` через `web.config.Settings`; файлов настроек и volume с данными у панели нет.
+- FastAPI + Jinja2 + htmx + Alpine.js + Pico.css, библиотеки вендорятся в `web/static`, сборки фронта нет.
 - Страница = `templates/<page>.html` (обёртка) + `templates/partials/<page>.html` (тело); роут отвечает через
   `render.Renderer`: без заголовка `HX-Request` — полная страница, POST → 303, ошибка → 400; с ним — partial,
   успех с тостом в `HX-Trigger`, ошибка валидации — 422 с баннером и введёнными значениями. Новая страница или
   форма обязана следовать этой схеме.
-- `web/trust.py` — единственная запись списков доверия (`agent_users`, `agent_peers`, `peer_prompts`): файл читается
-  строго и при чужой форме не перезаписывается. Любая запись в `access.json` и `runtime.json` идёт через
-  `web.services.update_config`: чтение, правка и запись под одной блокировкой, иначе две правки подряд теряют
-  друг друга. Прав агента в панели нет: они живут в `bot/agent/methods.py` бота и правятся только там.
-- `web/dryrun.py` — песочница: цикл агента с `dry_run`, чтения из VK настоящие, записи не выполняются, в журнал
-  ничего не попадает. `web/journal.py` — модели журнала, `web/state.py` — статус, ожидающие «да» и причины молчания.
 - `web/im/` — мессенджер: `views.py` превращает ответы VK в неизменяемые view-модели (шаблоны знают только их),
-  `modes.py` — бейдж «слушает ли агент этот чат» (тот же `gate.rejection`, что в боте) и панель чата,
-  `controls.py` — правки `runtime.json` для чата, `voice.py` и `uploads.py` — проверка голосовых и фото по
-  сигнатуре, `events.py` — SSE по mtime `state/inbox.json`. Отметка «прочитано» — только кнопкой, открытие чата
-  прочитанным его не делает. Ничего из VK не пишется на диск.
+  `voice.py` и `uploads.py` — проверка голосовых и фото по сигнатуре, `live.py` — свой long poll VK (поток
+  заводится при первой подписке на `/im/events` и двигает версию переписки), `events.py` — SSE по этой версии.
+  Отметка «прочитано» — только кнопкой, открытие чата прочитанным его не делает. Ничего из VK не пишется на диск.
 - Вход — форма `/login`: cookie сессии (HMAC от пароля, состояния на сервере нет) живёт до «Выйти» или смены
   пароля; Basic Auth с тем же паролем принимается для скриптов; после 5 неверных паролей IP блокируется на 15 минут.
-  Без `WEB_PASSWORD` панель не стартует. Наружу видна только через Caddy (HTTPS на `WEB_DOMAIN`, `tls internal`,
-  порт 443); сама панель порт не публикует, образ задаёт `WEB_HOST=0.0.0.0`, локальный запуск слушает loopback.
-- Деплой — свой `docker-compose.yml`: сервисы `web` и `caddy`; `config/` бота, volume со `state/` и сеть с `ai`
-  подключаются как внешние по переменным `.env` (`BOT_CONFIG_DIR`, `BOT_STATE_VOLUME`, `BOT_NETWORK`); пути вида `../`
-  в compose и Dockerfile запрещены (`tests/test_docs.py`). Контейнер работает от uid 1000 и пишет в `config/` бота.
-  Потолки агента (`AGENT_*`, лимиты частоты) панель показывает из своего `.env`: они должны совпадать с `.env` бота.
-- Тексты сообщений не попадают в логи; токен VK и ключи вырезаются из всего исходящего (`safe_error`).
+  Без `WEB_PASSWORD` панель не стартует. Наружу видна только через Caddy: HTTPS на `https://<WEB_DOMAIN>:8080`,
+  `tls internal`; сама панель тоже слушает 8080, но порт не публикует, образ задаёт `WEB_HOST=0.0.0.0`, локальный
+  запуск слушает loopback. Lockout доверяет последнему `X-Forwarded-For`, поэтому uvicorn нельзя публиковать мимо Caddy.
+- Деплой — свой `docker-compose.yml`: сервисы `web` и `caddy`, volume только `caddy_data`; внешних volume, сетей
+  и путей вида `../` нет (`tests/test_docs.py`). Контейнер работает от uid 1000.
+- Тексты сообщений не попадают в логи; токен VK вырезается из всего исходящего (`safe_error`).
 
 ## Команды
 
 - Тесты: `.venv/bin/pytest`
-- Локальный запуск: `WEB_PASSWORD=… .venv/bin/python -m web.app` → http://127.0.0.1:8080; пути к данным бота
-  (`ACCESS_FILE`, `RUNTIME_FILE`, `PERSONAS_DIR`, `STATE_DIR`) и `AI_URL` — в `.env`; для голосовых нужен `ffmpeg`
+- Локальный запуск: `WEB_PASSWORD=… .venv/bin/python -m web.app` → http://127.0.0.1:8080; `VK_TOKEN` — в `.env`;
+  для голосовых нужен `ffmpeg`
 - Окружение: `python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`
 - Деплой: `docker compose up -d --build` (нужен `.env`; локально Docker не поднимается, образ проверяется на сервере)
 

@@ -16,9 +16,9 @@
 {% endmacro %}
 {% if part == 'page' %}{{ media_page() }}
 {% elif part == 'tab' %}{{ tab_body() }}
-{% else %}<div class="im-bot im-media-panel" x-data="{ tab: '{{ type }}' }">
-  <header class="im-bot-head">
-    <span class="ava a32 robot">{{ icon('picture_outline_24') }}</span>
+{% else %}<div class="im-panel im-media-panel" x-data="{ tab: '{{ type }}' }">
+  <header class="im-panel-head">
+    <span class="ava a32 accent">{{ icon('picture_outline_24') }}</span>
     <span class="body"><span class="line"><b>Вложения</b></span><small>из этого чата, сначала новые</small></span>
     <button type="button" class="ib" @click="panel = null" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
   </header>

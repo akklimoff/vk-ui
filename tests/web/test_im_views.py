@@ -2,7 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from tests.web.im_fixtures import HISTORY, CONVERSATIONS, ME, PEER_CHAT, PEER_USER
-from web.im.views import (Attachment, BotMark, Message, Peer, Profiles, attachment_of, day_label, parse_conversations,
+from web.im.views import (Attachment, Message, Peer, Profiles, attachment_of, day_label, parse_conversations,
                           parse_history, parse_media, parse_search, presence, preview, rows, wave_bars)
 
 TZ = ZoneInfo("Europe/Moscow")
@@ -33,11 +33,6 @@ def test_parse_history_is_chronological_with_read_marks_and_attachments():
     assert messages[0].action == "Вася Пупкин пригласил(а) Аня Иванова"
     assert messages[3].attachments[0].kind == "sticker"
     assert messages[3].attachments[0].url == "https://cdn.example/st256.png"
-
-
-def test_bot_marks_attach_to_own_messages():
-    messages, _ = parse_history(HISTORY, ME, marks={501: BotMark("rina", "grok-4.6")})
-    assert messages[2].bot == BotMark("rina", "grok-4.6") and messages[1].bot is None
 
 
 def test_attachment_of_picks_largest_photo_and_medium_preview():

@@ -11,25 +11,6 @@ document.addEventListener("alpine:init", () => {
       this.items = this.items.filter((t) => t.id !== id);
     },
   });
-
-  const grow = (el) => {
-    el.style.height = "auto";
-    el.style.height = el.scrollHeight + 2 + "px";
-  };
-
-  Alpine.data("autogrow", () => ({
-    init() { grow(this.$el); },
-    grow() { grow(this.$el); },
-  }));
-
-  Alpine.data("editor", () => ({
-    n: 0,
-    init() { this.input(); },
-    input() {
-      this.n = this.$refs.t.value.length;
-      grow(this.$refs.t);
-    },
-  }));
 });
 
 function toast(text, kind) {
@@ -51,13 +32,3 @@ document.addEventListener("htmx:responseError", (e) => {
 });
 
 document.addEventListener("htmx:sendError", () => toast("Нет связи с сервером", "bad"));
-
-function localTime(ts) {
-  return new Date(Number(ts) * 1000).toLocaleString("ru", {
-    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-  });
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  document.querySelector(".topnav [aria-current]")?.scrollIntoView({ inline: "center", block: "nearest" });
-});

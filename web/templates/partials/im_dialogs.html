@@ -1,4 +1,4 @@
 {% from "partials/im_icons.html" import icon %}
 {# только <li>, вставляется в #dialog-list; more — сколько уже загружено, если VK отдаст ещё #}
-{% for d, mode in dialogs %}{% set last_pinned = d.pinned and not (loop.nextitem and loop.nextitem[0].pinned) %}{% include "partials/im_dialog.html" %}{% endfor %}
+{% for d in dialogs %}{% set last_pinned = d.pinned and not (loop.nextitem and loop.nextitem.pinned) %}{% include "partials/im_dialog.html" %}{% endfor %}
 {% if more %}<li class="dlg-more" hx-get="/im/dialogs/more?offset={{ more }}" hx-trigger="intersect once" hx-target="this" hx-swap="outerHTML"></li>{% endif %}

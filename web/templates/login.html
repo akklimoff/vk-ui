@@ -1,9 +1,8 @@
 {% extends "base.html" %}
-{% block nav %}{% endblock %}
 {% block main_class %}container login{% endblock %}
 {% block body %}
 <article class="login-card">
-  <header><b>Вход в админку</b></header>
+  <header><b>Вход в vk-ui</b></header>
   {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
   <form method="post" action="/login">
     <input type="hidden" name="next" value="{{ next }}">

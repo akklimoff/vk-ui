@@ -50,6 +50,15 @@ def is_chat(peer_id: int) -> bool:
     return peer_id >= GROUP_CHAT_PEER_BASE
 
 
+def peer_label(peer_id: int) -> str:
+    return f"беседа {peer_id - GROUP_CHAT_PEER_BASE}" if is_chat(peer_id) else f"id{peer_id}"
+
+
+def peer_link(peer_id: int) -> str:
+    sel = f"c{peer_id - GROUP_CHAT_PEER_BASE}" if is_chat(peer_id) else str(peer_id)
+    return f"https://vk.com/im?sel={sel}"
+
+
 @dataclass(frozen=True)
 class Peer:
     id: int
@@ -115,12 +124,6 @@ class Quote:
 
 
 @dataclass(frozen=True)
-class BotMark:
-    persona: str
-    model: str
-
-
-@dataclass(frozen=True)
 class Message:
     id: int
     ts: float
@@ -134,7 +137,6 @@ class Message:
     reply: Quote | None = None
     forwards: tuple[Forward, ...] = ()
     action: str = ""
-    bot: BotMark | None = None
 
 
 @dataclass(frozen=True)
@@ -373,7 +375,7 @@ def forwards_of(msg: dict, profiles: Profiles) -> tuple[Forward, ...]:
     return tuple(forward_of(f, profiles) for f in msg.get("fwd_messages") or [])
 
 
-def message_of(msg: dict, profiles: Profiles, me_id: int, out_read: int, marks: dict) -> Message:
+def message_of(msg: dict, profiles: Profiles, me_id: int, out_read: int) -> Message:
     from_id = msg["from_id"]
     out = from_id == me_id
     reply = msg.get("reply_message")
@@ -385,7 +387,6 @@ def message_of(msg: dict, profiles: Profiles, me_id: int, out_read: int, marks: 
         reply=Quote(profiles.name(reply["from_id"]), reply.get("text") or preview_label(reply)) if reply else None,
         forwards=forwards_of(msg, profiles),
         action=action_text(msg.get("action"), profiles, from_id),
-        bot=marks.get(msg["id"]),
     )
 
 
@@ -430,7 +431,7 @@ def peer_of(conv: dict, profiles: Profiles) -> Peer:
                 last_seen=profiles.last_seen(pid), sex=profiles.sex(pid))
 
 
-def parse_conversations(raw: dict, me_id: int, marks: dict | None = None) -> list[Dialog]:
+def parse_conversations(raw: dict, me_id: int) -> list[Dialog]:
     profiles = Profiles(raw)
     dialogs = []
     for item in raw.get("items") or []:
@@ -438,7 +439,7 @@ def parse_conversations(raw: dict, me_id: int, marks: dict | None = None) -> lis
         last = item.get("last_message")
         dialogs.append(Dialog(
             peer=peer_of(conv, profiles),
-            last=message_of(last, profiles, me_id, int(conv.get("out_read", 0)), marks or {}) if last else None,
+            last=message_of(last, profiles, me_id, int(conv.get("out_read", 0))) if last else None,
             unread=int(conv.get("unread_count", 0)),
             muted=bool((conv.get("push_settings") or {}).get("disabled_forever")),
             pinned=bool((conv.get("sort_id") or {}).get("major_id")),
@@ -451,11 +452,11 @@ def parse_search(raw: dict, me_id: int) -> list[Dialog]:
     return parse_conversations({**raw, "items": [{"conversation": c} for c in raw.get("items") or []]}, me_id)
 
 
-def parse_history(raw: dict, me_id: int, marks: dict | None = None) -> tuple[list[Message], int]:
+def parse_history(raw: dict, me_id: int) -> tuple[list[Message], int]:
     profiles = Profiles(raw)
     convs = raw.get("conversations") or []
     out_read = int(convs[0].get("out_read", 0)) if convs else 0
-    messages = [message_of(m, profiles, me_id, out_read, marks or {}) for m in raw.get("items") or []]
+    messages = [message_of(m, profiles, me_id, out_read) for m in raw.get("items") or []]
     return list(reversed(messages)), out_read
 
 

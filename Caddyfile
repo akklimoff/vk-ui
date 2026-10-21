@@ -1,9 +1,15 @@
 {
 	# по голому IP клиенты не шлют SNI, без этого Caddy не находит сертификат
 	default_sni {$WEB_DOMAIN}
+	# наружу открыт только 8080: редиректу с порта 80 некуда вести
+	auto_https disable_redirects
+	# опубликован только TCP 8080: объявленный HTTP/3 по UDP браузер пробовал бы впустую
+	servers {
+		protocols h1 h2
+	}
 }
 
-{$WEB_DOMAIN} {
+{$WEB_DOMAIN}:8080 {
 	tls internal
 	reverse_proxy web:8080
 	header Cache-Control "no-store"
