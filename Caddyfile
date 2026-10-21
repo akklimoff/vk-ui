@@ -1,0 +1,13 @@
+{
+	# по голому IP клиенты не шлют SNI, без этого Caddy не находит сертификат
+	default_sni {$WEB_DOMAIN}
+}
+
+{$WEB_DOMAIN} {
+	tls internal
+	reverse_proxy web:8080
+	header Cache-Control "no-store"
+	# статика отдаётся с ETag, браузер её ревалидирует, а не качает заново
+	@static path /static/*
+	header @static Cache-Control "no-cache"
+}

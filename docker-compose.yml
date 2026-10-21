@@ -1,0 +1,37 @@
+# Панель делит с ботом только данные: его config/ (панель их правит), volume со state/ (только чтение)
+# и сеть, в которой виден сервис ai. Где они лежат — в .env (BOT_CONFIG_DIR, BOT_STATE_VOLUME, BOT_NETWORK).
+services:
+  web:
+    build: .
+    env_file: .env
+    volumes:
+      - ${BOT_CONFIG_DIR:?BOT_CONFIG_DIR — путь к config/ бота}:/app/config
+      - bot_state:/app/state:ro
+    networks:
+      - default
+      - bot
+    restart: unless-stopped
+    init: true
+  caddy:
+    image: caddy:2
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:?WEB_DOMAIN — адрес панели для Caddy}
+    ports:
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    restart: unless-stopped
+    depends_on:
+      - web
+
+volumes:
+  bot_state:
+    external: true
+    name: ${BOT_STATE_VOLUME:-vk_mcp_state}
+  caddy_data:
+
+networks:
+  bot:
+    external: true
+    name: ${BOT_NETWORK:-vk_mcp_default}
