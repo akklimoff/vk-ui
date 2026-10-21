@@ -253,4 +253,5 @@ def test_archived_peers_are_read_page_by_page_through_the_archive_filter():
         assert client.archived_peers() == {2000000001, 22, -5}
     finally:
         web.vk.ARCHIVE_PAGE = original
-    assert [(p["filter"], p["offset"]) for p in client.api.sent] == [("archive", 0), ("archive", 2)]
+    assert [(p["filter"], p["offset"], p["v"]) for p in client.api.sent] == [("archive", 0, "5.199"),
+                                                                       ("archive", 2, "5.199")]

@@ -11,6 +11,8 @@ log = logging.getLogger("vk-ui")
 
 PROFILE_FIELDS = "photo_50,photo_100,online,last_seen,sex,screen_name"
 ARCHIVE_PAGE = 200
+# фильтра archive нет в 5.92, которую vk_api шлёт по умолчанию: на ней VK отвечает [15] Access denied
+ARCHIVE_API_VERSION = "5.199"
 
 
 def voice_attachment(saved: dict) -> str:
@@ -97,7 +99,8 @@ class VkClient:
     def archived_peers(self) -> frozenset[int]:
         peers, offset = set(), 0
         while True:
-            raw = self.api.messages.getConversations(filter="archive", count=ARCHIVE_PAGE, offset=offset)
+            raw = self.api.messages.getConversations(filter="archive", count=ARCHIVE_PAGE, offset=offset,
+                                                     v=ARCHIVE_API_VERSION)
             items = raw.get("items") or []
             peers |= {item["conversation"]["peer"]["id"] for item in items}
             offset += len(items)
