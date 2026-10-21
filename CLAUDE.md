@@ -1,23 +1,33 @@
 # vk-ui
 
-Веб-панель агента ВКонтакте [vk-mcp](https://github.com/akklimoff/vk_mcp): статус бота, персоны, промпты, настройки,
-доверие, журнал действий, песочница и мессенджер `/im`. Вынесена из vk-mcp 2026-10-21 вместе с историей `web/`.
-Пока не выполнен план `docs/superpowers/plans/2026-10-21-vk-ui-split.md`, репозиторий не автономен: пакеты `ai`,
-`bot`, `common` берутся из соседнего checkout'а vk-mcp (`../vk-mcp`), в нём же живёт venv.
+Веб-панель агента ВКонтакте [vk-mcp](https://github.com/akklimoff/vk_mcp): статус бота, персоны, промпт, настройки,
+доверие, журнал действий, песочница и мессенджер `/im`. Отдельный сервис со своим образом и своим репозиторием;
+от vk-mcp не зависит ни кодом, ни сборкой: нужное панели ядро агента лежит здесь. С ботом делит только данные —
+его `config/` (панель правит), `state/` (панель читает) и docker-сеть, где виден сервис `ai`.
+
+Репозиторий публичный: в коммиты не попадают реальные id, ники, имена, адреса серверов и секреты.
 
 ## Архитектура
 
-- FastAPI + Jinja2 + htmx + Alpine.js + Pico.css, библиотеки вендорятся в `web/static`, сборки фронта нет.
-  Отдельный процесс: с ботом общается только через файлы — правит `config/` (`access.json`, `runtime.json`,
-  `personas/`), читает `state/` (`status.json`, `actions.jsonl`, `pending.json`, `rejections.json`, `inbox.json`);
-  в VK ходит сам через `bot.vk.VkClient`, в LLM — через `ai.client` по `AI_URL`. Любая новая настройка идёт через
-  `config/`, а не через общую память с ботом.
-- Из ядра vk-mcp панель берёт ровно три группы модулей, и этот список только сокращается:
-  форматы файлов (`bot.access`, `bot.runtime`, `bot.status`, `bot.agent.journal`, `bot.agent.rejections`,
-  `ai.personas`); решения агента — чистые функции (`bot.agent.gate`, `bot.limits.mention_of`,
-  `bot.agent.loop.Limits`); исполнение (`bot.vk`, `bot.agent.loop.run` с `request`, `pictures`, `reply` для
-  песочницы, `ai.client`, `ai.catalog`, `bot.config.Settings`, `common.redact`). Из `ai/` — только `contract`,
-  `catalog`, `personas`, `client`; `openai` и `vk_api` в `web/` не импортируются.
+- Три слоя с однонаправленными зависимостями: `web/` → `ai/`, `bot/` → `common/`. Граница проверяется
+  `tests/test_boundaries.py`.
+- `bot/`, `ai/`, `common/` — ядро агента, снимок vk-mcp 4e0382a (2026-10-18), с его тестами в `tests/`; теперь это код
+  vk-ui, но форматы файлов и решения в нём — контракт с ботом: `config/access.json` (`bot/access.py`),
+  `config/runtime.json` (`bot/runtime.py`), `config/personas/*.md` (`ai/personas.py`), `state/status.json`,
+  `inbox.json`, `pending.json` (`bot/status.py`), `state/actions.jsonl` (`bot/agent/journal.py`),
+  `state/rejections.json` (`bot/agent/rejections.py`) и фильтр `bot/agent/gate.py`, по которому панель судит, слушает
+  ли агент чат. Менять их можно только вместе с ботом, иначе панель прочитает его файлы неверно.
+  Самого бота здесь нет и быть не должно: ни long poll (`bot/main.py`), ни очереди просьб (`bot/agent/worker.py`),
+  ни HTTP-сервиса ИИ (`ai/http.py`) — тест границ это проверяет.
+- Что панель берёт из ядра — явный список `CORE_FOR_PANEL` в `tests/test_boundaries.py`: форматы файлов, решения
+  агента (`gate`, `limits.mention_of`, `loop.Limits`) и исполнение (`bot.vk.VkClient`, цикл `bot.agent.loop.run`
+  с `request`, `pictures`, `reply` для песочницы, `ai.client`, `ai.catalog`, `bot.config.Settings`, `common.redact`).
+  Из `ai/` панель и ядро берут только `contract`, `catalog`, `personas`, `client`; `ai.service`, `ai.llm`, `ai.claude`
+  нужны, чтобы без `AI_URL` LLM работал в процессе (так же работают тесты). Ключи и промпты LLM — только
+  в `ai.config.AiSettings`; `bot.config.Settings` их не знает. `openai` импортируется только в `ai/llm.py`,
+  `vk_api` — только в `bot/vk.py`.
+- FastAPI + Jinja2 + htmx + Alpine.js + Pico.css, библиотеки вендорятся в `web/static`, сборки фронта нет. Любая
+  новая настройка идёт через `config/`, а не через общую память с ботом.
 - Страница = `templates/<page>.html` (обёртка) + `templates/partials/<page>.html` (тело); роут отвечает через
   `render.Renderer`: без заголовка `HX-Request` — полная страница, POST → 303, ошибка → 400; с ним — partial,
   успех с тостом в `HX-Trigger`, ошибка валидации — 422 с баннером и введёнными значениями. Новая страница или
@@ -25,7 +35,7 @@
 - `web/trust.py` — единственная запись списков доверия (`agent_users`, `agent_peers`, `peer_prompts`): файл читается
   строго и при чужой форме не перезаписывается. Любая запись в `access.json` и `runtime.json` идёт через
   `web.services.update_config`: чтение, правка и запись под одной блокировкой, иначе две правки подряд теряют
-  друг друга. Прав агента в панели нет: они правятся только кодом в `bot/agent/methods.py` vk-mcp.
+  друг друга. Прав агента в панели нет: они живут в `bot/agent/methods.py` бота и правятся только там.
 - `web/dryrun.py` — песочница: цикл агента с `dry_run`, чтения из VK настоящие, записи не выполняются, в журнал
   ничего не попадает. `web/journal.py` — модели журнала, `web/state.py` — статус, ожидающие «да» и причины молчания.
 - `web/im/` — мессенджер: `views.py` превращает ответы VK в неизменяемые view-модели (шаблоны знают только их),
@@ -35,18 +45,21 @@
   прочитанным его не делает. Ничего из VK не пишется на диск.
 - Вход — форма `/login`: cookie сессии (HMAC от пароля, состояния на сервере нет) живёт до «Выйти» или смены
   пароля; Basic Auth с тем же паролем принимается для скриптов; после 5 неверных паролей IP блокируется на 15 минут.
-  Без `WEB_PASSWORD` панель не стартует. Наружу видна только через Caddy (HTTPS на `WEB_DOMAIN`).
+  Без `WEB_PASSWORD` панель не стартует. Наружу видна только через Caddy (HTTPS на `WEB_DOMAIN`, `tls internal`,
+  порт 443); сама панель порт не публикует, образ задаёт `WEB_HOST=0.0.0.0`, локальный запуск слушает loopback.
+- Деплой — свой `docker-compose.yml`: сервисы `web` и `caddy`; `config/` бота, volume со `state/` и сеть с `ai`
+  подключаются как внешние по переменным `.env` (`BOT_CONFIG_DIR`, `BOT_STATE_VOLUME`, `BOT_NETWORK`); пути вида `../`
+  в compose и Dockerfile запрещены (`tests/test_docs.py`). Контейнер работает от uid 1000 и пишет в `config/` бота.
+  Потолки агента (`AGENT_*`, лимиты частоты) панель показывает из своего `.env`: они должны совпадать с `.env` бота.
 - Тексты сообщений не попадают в логи; токен VK и ключи вырезаются из всего исходящего (`safe_error`).
 
 ## Команды
 
-Пока свой venv не заведён (фаза 1 плана), всё запускается из venv vk-mcp с его пакетами в `PYTHONPATH`:
-
-- Тесты: `PYTHONPATH=../vk-mcp ../vk-mcp/.venv/bin/pytest`
-- Локальный запуск: `PYTHONPATH=../vk-mcp WEB_PASSWORD=… ../vk-mcp/.venv/bin/python -m web.app`
-  → http://127.0.0.1:8080; пути `ACCESS_FILE`, `RUNTIME_FILE`, `PERSONAS_DIR`, `STATE_DIR` задаются в `.env`
-  (по умолчанию относительно текущей папки); для голосовых нужен `ffmpeg` с `libopus`
-- Деплой: пока из vk-mcp (`docker compose up -d --build` там, образ `Dockerfile.web`); свой образ — фаза 2 плана
+- Тесты: `.venv/bin/pytest`
+- Локальный запуск: `WEB_PASSWORD=… .venv/bin/python -m web.app` → http://127.0.0.1:8080; пути к данным бота
+  (`ACCESS_FILE`, `RUNTIME_FILE`, `PERSONAS_DIR`, `STATE_DIR`) и `AI_URL` — в `.env`; для голосовых нужен `ffmpeg`
+- Окружение: `python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`
+- Деплой: `docker compose up -d --build` (нужен `.env`; локально Docker не поднимается, образ проверяется на сервере)
 
 ## Mandatory project rules (keep in sync with AGENTS.md / CLAUDE.md)
 
