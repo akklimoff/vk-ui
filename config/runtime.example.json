@@ -1,0 +1,13 @@
+{
+  "active_persona": "valentina",
+  "active_model": "",
+  "peer_personas": {
+    "2000000007": [
+      "rina",
+      "monika"
+    ]
+  },
+  "paused": false,
+  "paused_peers": [],
+  "temperature": 0.8
+}
