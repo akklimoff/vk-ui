@@ -7,12 +7,12 @@
 {% if m.action %}<div class="im-action" data-id="{{ m.id }}" data-from="0" data-ts="{{ m.ts }}">{{ m.action }}</div>{% else %}
 <article class="msg {{ 'head' if r.head }} {{ 'out' if m.out }}" data-id="{{ m.id }}" data-from="{{ m.from_id }}" data-ts="{{ m.ts }}">
   {% if r.head %}<a class="ava a36" href="{{ profile(m.from_id) }}" target="_blank" rel="noopener">{% if m.photo %}<img src="{{ m.photo }}" alt="">{% else %}<i>{{ m.author[:1] }}</i>{% endif %}</a>{% endif %}
-  <span class="info">{% if m.out %}<span class="ticks" :class="{ read: {{ m.id }} <= outRead }">{{ icon('check_outline_16', 'one') }}{{ icon('check_double_outline_16', 'two') }}</span>{% endif %}<time>{{ m.ts|clock(tz) }}</time></span>
+  <span class="info">{% if m.out %}<span class="ticks{{ ' read' if m.read }}">{{ icon('check_outline_16', 'one') }}{{ icon('check_double_outline_16', 'two') }}</span>{% endif %}<time>{{ m.ts|clock(tz) }}</time></span>
   {% if r.head %}<div class="name"><a href="{{ profile(m.from_id) }}" target="_blank" rel="noopener">{{ m.author }}</a></div>{% endif %}
   {% if m.reply %}<blockquote class="quote"><b>{{ m.reply.author }}</b><span>{{ m.reply.text }}</span></blockquote>{% endif %}
   {% if m.text %}<p class="text">{{ m.text }}</p>{% endif %}
-  {{ attachments(m.attachments, m.id, c.now, tz) }}
-  {{ forwards(m.forwards, m.id, c.now, tz) }}
+  {% set back = c.peer_id|peer_link(m.id) %}{{ attachments(m.attachments, m.id, c.now, tz, back) }}
+  {{ forwards(m.forwards, m.id, c.now, tz, back) }}
   <span class="actions">
     {# одинарные кавычки: tojson не экранирует двойные #}
     <button type="button" title="Ответить" aria-label="Ответить" @click='$dispatch("im-reply", { id: {{ m.id }}, author: {{ m.author|tojson }}, text: {{ (m.text or (m|preview))[:80]|tojson }} })'>{{ icon('reply_24') }}</button>

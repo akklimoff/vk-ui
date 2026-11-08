@@ -157,5 +157,5 @@ def test_styles_and_scripts_carry_their_version(client):
     import re
 
     page = client.get("/login").text
-    assert re.search(r'href="/static/app\.css\?v=[1-9]\d*"', page) and re.search(r'src="/static/app\.js\?v=[1-9]\d*"', page)
-    assert client.get(re.search(r'/static/app\.css\?v=\d+', page)[0]).status_code == 200
+    assert re.search(r'href="/static/app\.css\?v=[0-9a-f]{10}"', page) and re.search(r'src="/static/app\.js\?v=[0-9a-f]{10}"', page)
+    assert client.get(re.search(r'/static/app\.css\?v=[0-9a-f]+', page)[0]).status_code == 200

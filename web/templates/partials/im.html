@@ -5,7 +5,7 @@
     <label class="im-search">{{ icon('search_outline_16') }}<input type="search" name="q" placeholder="Поиск" x-model="filter" x-ref="search" aria-label="Поиск по диалогам"
       hx-get="/im/dialogs/search" hx-trigger="input changed delay:300ms, search" hx-target="#search-results" hx-swap="innerHTML" hx-sync="this:replace"></label>
     <div id="dialogs" class="im-dialogs">
-      <ul id="dialog-list" hx-get="/im/dialogs"
+      <ul id="dialog-list" data-tz="{{ tz.key }}" data-now="{{ now|int }}" hx-get="/im/dialogs"
           hx-trigger="poke, every 60s [document.visibilityState === 'visible'], every 10s [document.visibilityState === 'visible' && !imLive()]"
           hx-vals='js:{...dialogsState()}' hx-target="#dialog-list" hx-swap="innerHTML" hx-sync="this:queue last" hx-disinherit="*">{% include "partials/im_dialogs.html" %}</ul>
       <div class="im-search-results" x-show="filter.trim()" x-cloak>
@@ -23,6 +23,7 @@
     </div>
   </section>
   <template id="im-empty">{% include "partials/im_empty.html" %}</template>
+  {% include "partials/im_viewer.html" %}
   <dialog class="im-confirm" x-ref="confirm" @close="answer($el.returnValue === 'yes')">
     <form method="dialog">
       <p x-text="question"></p>

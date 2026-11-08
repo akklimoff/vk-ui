@@ -1,5 +1,5 @@
 {% set c = chat %}
-{% if before %}{% if c.oldest %}<div class="im-more" hx-get="/im/{{ c.peer_id }}/messages?before={{ c.oldest }}" hx-trigger="intersect once" hx-swap="outerHTML"></div>{% endif %}{% endif %}
+{% if before %}{% if c.oldest %}<div class="im-more" hx-get="/im/{{ c.peer_id }}/messages?before={{ c.oldest }}" hx-trigger="near once" hx-swap="outerHTML"></div>{% endif %}{% endif %}
 {% with rows = c.rows, tz = c.tz %}{% include "partials/im_rows.html" %}{% endwith %}
 {% if after is not none %}
 <div id="chat-state" hx-swap-oob="true" data-out-read="{{ c.out_read }}" hidden></div>

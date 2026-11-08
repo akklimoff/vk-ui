@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
+{# attributesToSettle пуст: htmx переносил на новый чат style и class старого с тем же id и стирал то, что Alpine
+   успел выставить в x-show, — пустая панель вложений закрывала экран #}
+<meta name="htmx-config" content='{"attributesToSettle":[],"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
 <title>vk-ui</title>
 <link rel="stylesheet" href="{{ asset('pico.min.css') }}">
 <link rel="stylesheet" href="{{ asset('app.css') }}">

@@ -82,7 +82,8 @@ def test_history_media_ask_for_photo_sizes_in_message_order():
     client.history_media(2000000001, "photo", 60)
     client.history_media(2000000001, "photo", 60, start_from="9/1")
     first, more = client.api.sent
-    assert first == {"peer_id": 2000000001, "media_type": "photo", "count": 60, "photo_sizes": 1, "preserve_order": 1}
+    assert first == {"peer_id": 2000000001, "media_type": "photo", "count": 60, "photo_sizes": 1, "preserve_order": 1,
+                     "v": "5.199"}
     assert more["start_from"] == "9/1"
 
 
@@ -204,15 +205,17 @@ def test_listener_signals_batches_that_change_messages(monkeypatch):
                             {"ts": 103, "updates": [raw_message(4)]})
     client = listening(monkeypatch, FakeLongPollSession(), http)
     batches = []
-    assert [e.message_id for e in itertools.islice(client.listen(changed=lambda: batches.append(1)), 1)] == [4]
-    assert batches == [1, 1]
+    assert [e.message_id for e in itertools.islice(client.listen(changed=batches.append), 1)] == [4]
+    # первый сигнал — без чатов: события до ts нового long poll никто не видел
+    assert batches == [None, frozenset({2_000_000_001}), frozenset({2_000_000_001})]
 
 
 def test_a_failing_change_signal_does_not_lose_the_batch(monkeypatch):
     import itertools
 
-    def broken():
-        raise RuntimeError("сбой")
+    def broken(peers):
+        if peers is not None:
+            raise RuntimeError("сбой")
 
     http = FakeLongPollHttp({"ts": 101, "updates": [raw_message(4)]})
     client = listening(monkeypatch, FakeLongPollSession(), http)
@@ -255,3 +258,57 @@ def test_archived_peers_are_read_page_by_page_through_the_archive_filter():
         web.vk.ARCHIVE_PAGE = original
     assert [(p["filter"], p["offset"], p["v"]) for p in client.api.sent] == [("archive", 0, "5.199"),
                                                                        ("archive", 2, "5.199")]
+
+
+def test_changed_peers_name_the_chats_of_a_batch():
+    from types import SimpleNamespace
+
+    from vk_api.longpoll import VkEventType
+
+    from web.vk import changed_peers
+
+    new = SimpleNamespace(type=VkEventType.MESSAGE_NEW, peer_id=5)
+    read = SimpleNamespace(type=VkEventType.READ_ALL_OUTGOING_MESSAGES, peer_id=7)
+    typing = SimpleNamespace(type=VkEventType.USER_TYPING, peer_id=9)
+    assert changed_peers([new, read, typing]) == frozenset({5, 7})
+    assert changed_peers([typing]) == frozenset()
+    assert changed_peers([new, None]) is None
+    assert changed_peers([new, SimpleNamespace(type=VkEventType.MESSAGE_NEW, peer_id=None)]) is None
+
+
+def test_changed_dialogs_join_conversations_with_their_last_messages():
+    class ExecuteApi(FakeApi):
+        def execute(self, **params):
+            self.sent.append(params)
+            return {"conversations": {"items": [{"peer": {"id": 5}, "last_message_id": 50}, {"peer": {"id": 6}, "last_message_id": 60}],
+                                      "profiles": [{"id": 1}]},
+                    "messages": {"items": [{"id": 50, "text": "hi"}], "groups": [{"id": 2}]}}
+
+    client = client_with(FakeSession())
+    client.api = ExecuteApi()
+    raw = client.changed_dialogs([5, 6])
+    assert client.api.sent[0]["peers"] == "5,6"
+    assert raw["items"][0] == {"conversation": {"peer": {"id": 5}, "last_message_id": 50}, "last_message": {"id": 50, "text": "hi"}}
+    assert "last_message" not in raw["items"][1]
+    assert raw["profiles"] == [{"id": 1}] and raw["groups"] == [{"id": 2}]
+
+
+def test_vk_calls_no_longer_queue_behind_one_lock():
+    from web.pace import Pace
+    from web.vk import PacedVkApi
+
+    api = PacedVkApi(token="t", pace=Pace())
+    assert api.RPS_DELAY == 0
+    with api.lock:
+        with api.lock:
+            pass
+
+
+def test_a_lost_long_poll_history_marks_everything_changed(monkeypatch):
+    import itertools
+
+    http = FakeLongPollHttp({"failed": 1, "ts": 150}, {"ts": 151, "updates": [raw_message(4)]})
+    client = listening(monkeypatch, FakeLongPollSession(), http)
+    batches = []
+    assert [e.message_id for e in itertools.islice(client.listen(changed=batches.append), 1)] == [4]
+    assert batches == [None, None, frozenset({2_000_000_001})]

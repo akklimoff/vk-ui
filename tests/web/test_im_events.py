@@ -15,7 +15,7 @@ def collect(ticks, bump_at=()):
             state["version"] += 1
 
     async def run():
-        async for chunk in inbox_events(lambda: state["version"], disconnected, sleep=sleep):
+        async for chunk in inbox_events(lambda since: (state["version"], frozenset({5})), disconnected, sleep=sleep):
             out.append(chunk)
 
     asyncio.run(run())
@@ -24,7 +24,7 @@ def collect(ticks, bump_at=()):
 
 def test_changed_is_sent_once_per_new_version():
     out = collect(ticks=6, bump_at=(2, 5))
-    assert out[0].startswith("retry:") and out.count("event: changed\ndata: {}\n\n") == 2
+    assert out[0].startswith("retry:") and out.count('event: changed\ndata: {"peers": [5]}\n\n') == 2
 
 
 def test_quiet_stream_sends_keepalive_comments():
@@ -42,6 +42,7 @@ def test_stream_closes_while_long_poll_has_no_connection():
         state["tick"] += 1
 
     async def run():
-        return [chunk async for chunk in inbox_events(lambda: 0, disconnected, sleep=sleep, healthy=lambda: state["tick"] < 3)]
+        return [chunk async for chunk in inbox_events(lambda since: (0, frozenset()), disconnected, sleep=sleep,
+                                                      healthy=lambda: state["tick"] < 3)]
 
     assert asyncio.run(run()) == ["retry: 3000\n\n"] and state["tick"] == 3

@@ -119,6 +119,7 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
   font-size: 14px; line-height: 18px; }
 .im-empty .ico { color: var(--vk-icon-2); }
 .im-messages > .im-empty { height: auto; flex: 1; }
+html.im-modal, html.im-modal body { overflow: hidden; }
 .im-chat { display: grid; grid-template-columns: minmax(0, 1fr); height: 100%; min-height: 0; }
 .im-chat.with-panel { grid-template-columns: minmax(0, 1fr) 320px; }
 .im-convo { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -129,11 +130,15 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
 .im-chat-head .line b { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
 .im-chat-head small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--vk-text-2); font-size: 13px; line-height: 16px; }
 .im-history { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.im-messages { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; padding: 0 22px 8px; letter-spacing: -.007em; }
+/* column-reverse: лента открывается внизу без прокрутки скриптом, а старые страницы, вставленные сверху, не сдвигают
+   читаемое; поправку на дописанное снизу im.js делает сам, поэтому встроенное якорение браузера выключено */
+.im-scroll { display: flex; flex-direction: column-reverse; flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; overscroll-behavior: contain; }
+.im-messages { position: relative; display: flex; flex-direction: column; flex: 1 0 auto; padding: 0 22px 8px; letter-spacing: -.007em; }
 .im-messages > :first-child { margin-top: auto; }
 .im-day { position: sticky; top: 0; z-index: 2; display: flex; justify-content: center; padding: 9px 0; }
 .im-day span { padding: 3px 12px 5px; border-radius: 8px; background: var(--vk-content); color: var(--vk-subhead); font-size: 13px; line-height: 16px; letter-spacing: -.004em; }
 .im-day.stuck span { background: var(--vk-modal); box-shadow: var(--vk-shadow-2); }
+.im-day.past { visibility: hidden; }
 .im-unread { display: flex; align-items: center; gap: 1ch; padding: 14px 12px; color: var(--vk-text-3); font-size: 13px; line-height: 16px; }
 .im-unread::before, .im-unread::after { content: ""; flex: 1; height: 1px; background: var(--vk-sep-2); }
 .im-action { padding: 8px 0; text-align: center; color: var(--vk-subhead); font-size: 13px; line-height: 16px; }
@@ -152,7 +157,14 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
 .msg .actions button { display: grid; place-items: center; width: 28px; height: 28px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none;
   color: var(--vk-icon-2); box-shadow: none; cursor: pointer; }
 .msg .actions button:hover { background: var(--vk-secondary); }
-@media (hover: none) { .msg .actions { visibility: visible; opacity: .85; } }
+@media (hover: none) {
+  .msg:hover { background: transparent; }
+  .msg:hover .actions, .msg:focus-within .actions { visibility: hidden; }
+  .msg.picked { background: var(--vk-row-hover); z-index: 3; }
+  .msg.picked .actions { visibility: visible; }
+  .msg .actions button { width: 40px; height: 36px; }
+  .msg .actions { top: -30px; height: 36px; }
+}
 .quote { position: relative; display: flex; flex-direction: column; min-width: 128px; max-width: 580px; margin: 0 0 4px; padding: 4px 10px; border: 0;
   background: none; font-size: 13px; line-height: 18px; }
 .quote::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--vk-accent); }
@@ -178,6 +190,11 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
 .video .play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; filter: drop-shadow(0 0 8px rgba(0,0,0,.4)); }
 .video .dur { position: absolute; right: 8px; bottom: 8px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; line-height: 14px; }
 .video .title { max-width: 320px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
+.circle { position: relative; display: block; width: 240px; max-width: 100%; aspect-ratio: 1; margin: 4px 0; overflow: hidden; border-radius: 50%; background: #000; }
+.circle img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.circle .play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; filter: drop-shadow(0 0 8px rgba(0,0,0,.4)); }
+.circle .dur { position: absolute; left: 50%; bottom: 16px; padding: 2px 8px; border-radius: 10px; background: rgba(0,0,0,.55); color: #fff;
+  font-size: 12px; line-height: 14px; transform: translateX(-50%); }
 .story { position: relative; display: block; width: 120px; aspect-ratio: 9 / 16; margin: 4px 0; overflow: hidden; border-radius: 12px; background: var(--vk-secondary); }
 .story img { width: 100%; height: 100%; object-fit: cover; }
 .story span { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 4px; padding: 16px 8px 8px;
@@ -214,6 +231,8 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
 .voice .aa { width: 32px; height: 20px; margin: 0 0 0 8px; padding: 0; border: 0; border-radius: 8px; background: var(--vk-secondary); color: var(--vk-accent);
   font-size: 12px; line-height: 20px; font-weight: 500; box-shadow: none; cursor: pointer; }
 .voice .transcript { position: relative; flex-basis: 100%; margin: 8px 0 0; padding-left: 12px; }
+.voice .save { width: 28px; height: 28px; margin-left: 6px; color: var(--vk-icon-2); }
+.voice.loading .play { animation: im-pulse 1s ease-in-out infinite; }
 .voice .transcript::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; border-radius: 2px; background: var(--vk-link); opacity: .24; }
 
 .im-down { position: absolute; right: 16px; bottom: 12px; z-index: 5; display: grid; place-items: center; width: 40px; height: 40px; margin: 0; padding: 0; border: 0;
@@ -245,10 +264,30 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
 .row-input .send.ready { color: var(--vk-accent); opacity: 1; }
 .row-input .send:not(.ready) { opacity: .5; }
 
-.im-viewer { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(0,0,0,.9); touch-action: pan-y pinch-zoom; user-select: none; }
-.im-viewer img { max-width: 100vw; max-height: calc(100dvh - 112px); object-fit: contain; cursor: pointer; }
-.im-viewer .bar { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 4px; height: 56px; padding: 0 8px 0 16px; color: rgba(255,255,255,.8); font-size: 14px; }
+.im-viewer { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.92); user-select: none; -webkit-user-select: none; }
+.im-viewer .stage { position: absolute; inset: 0; overflow: hidden; touch-action: none; }
+.im-viewer .shot { position: absolute; inset: 56px 0; transform-origin: 50% 50%; will-change: transform; }
+.im-viewer .shot img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; object-fit: contain; -webkit-user-drag: none; }
+.im-viewer .hi { opacity: 0; transition: opacity .15s; }
+.im-viewer .hi.ready { opacity: 1; }
+.im-viewer .bar { position: absolute; top: 0; left: 0; right: 0; z-index: 1; display: flex; align-items: center; gap: 4px; height: 56px; padding: 0 8px 0 16px;
+  color: rgba(255,255,255,.8); font-size: 14px; transition: opacity .15s; }
 .im-viewer .bar span { flex: 1; }
+.im-viewer .bar.hidden { opacity: 0; pointer-events: none; }
+.spin { display: block; width: 32px; height: 32px; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: im-spin .8s linear infinite; }
+.im-viewer .spin { position: absolute; left: 50%; top: 50%; margin: -16px 0 0 -16px; pointer-events: none; }
+@keyframes im-spin { to { transform: rotate(360deg); } }
+.im-player { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.85); }
+.im-player .box { display: flex; flex-direction: column; width: min(960px, 100%); max-height: 100%; overflow: hidden; border-radius: 12px; background: #000; color: #fff; }
+.im-player .box.round { width: min(480px, 100%); }
+.im-player .bar { display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 4px 0 16px; color: rgba(255,255,255,.8); font-size: 14px; }
+.page-im .im-player .ib { width: 40px; height: 40px; color: #fff; }
+.page-im .im-player .ib:hover { background: rgba(255,255,255,.1); }
+.im-player iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
+.im-player .round iframe { aspect-ratio: 1; }
+.im-player .hint { margin: 0; padding: 10px 16px 14px; color: rgba(255,255,255,.7); font-size: 13px; line-height: 18px; }
+.page-im .im-player .hint a { margin-left: 4px; color: #71aaeb; }
+.im-player .slot > .spin { margin: 96px auto; }
 .page-im .im-viewer .ib { width: 44px; height: 44px; color: #fff; }
 .page-im .im-viewer .ib:hover { background: rgba(255,255,255,.1); }
 .page-im .im-viewer .nav { position: absolute; top: 50%; width: 56px; height: 56px; margin-top: -28px; border-radius: 50%; background: rgba(0,0,0,.3); }
@@ -266,6 +305,7 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
 .im-media-items.video { grid-template-columns: repeat(2, 1fr); }
 .im-media-items .tile { position: relative; display: block; aspect-ratio: 1; overflow: hidden; background: var(--vk-secondary); }
 .im-media-items .video-tile { aspect-ratio: 16 / 10; border-radius: 6px; background: #000; }
+.im-media-items .video-tile.round { aspect-ratio: 1; border-radius: 50%; }
 .im-media-items .tile img { width: 100%; height: 100%; object-fit: cover; transition: opacity .15s; }
 .im-media-items .tile:hover img { opacity: .85; }
 .im-media-items .tile .dur { position: absolute; right: 4px; bottom: 4px; padding: 1px 5px; border-radius: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; }
@@ -284,7 +324,7 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
 .im-skeleton .bar { height: 12px; }
 .im-skeleton .bar.short { width: 90px; }
 @keyframes im-pulse { 50% { opacity: .5; } }
-@media (prefers-reduced-motion: reduce) { .im-skeleton i { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .im-skeleton i, .voice.loading .play { animation: none; } }
 .im-search-results h5 { margin: 8px 20px 4px; color: var(--vk-text-2); font-size: 13px; line-height: 16px; font-weight: 500; }
 #search-results { margin: 0; padding: 0; list-style: none; }
 .im-search-results:not(:has(#search-results li)) { display: none; }
@@ -337,6 +377,12 @@ main.im-shell { grid-column: 3; grid-row: 2; margin: 16px 0; padding: 0; max-wid
   .im-side-foot:last-child { padding-bottom: env(safe-area-inset-bottom); height: calc(52px + env(safe-area-inset-bottom)); }
   .im-down { right: 8px; }
   .im-viewer .nav { display: none; }
+  .im-viewer { background: #000; }
+  .im-viewer .shot { inset: 0; }
+  .im-viewer .bar { background: linear-gradient(rgba(0,0,0,.5), transparent); }
+  .circle { width: 200px; }
+  .im-player { padding: 0; }
+  .im-player .box { border-radius: 0; }
   .im-chat.with-panel { grid-template-columns: minmax(0, 1fr); }
   .im-panel-slot { position: fixed; inset: 0; z-index: 40; border: 0; }
 }

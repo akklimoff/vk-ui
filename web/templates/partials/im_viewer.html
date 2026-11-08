@@ -1,0 +1,30 @@
+{% from "partials/im_icons.html" import icon %}
+{# просмотрщик фото и плеер видео: живут вне #chat, смена чата их не пересоздаёт; открываются событиями im-view и im-watch #}
+<div class="im-viewer" x-data="viewer()" x-show="open" x-cloak @im-view.window="show($event.detail)"
+     @keydown.escape.window="open && close()" @keydown.arrow-left.window="open && !typing($event) && step(-1)"
+     @keydown.arrow-right.window="open && !typing($event) && step(1)">
+  <div class="bar" :class="{ hidden: !chrome }">
+    <span x-text="items.length > 1 ? `${i + 1} из ${items.length}` : ''"></span>
+    <a class="ib" :href="cur.save" download title="Сохранить" aria-label="Сохранить" x-show="cur.save">{{ icon('download_outline_24') }}</a>
+    <a class="ib" :href="cur.full" target="_blank" rel="noopener" title="Открыть оригинал" aria-label="Открыть оригинал">{{ icon('external_link_outline_24') }}</a>
+    <button type="button" class="ib" @click="close()" aria-label="Закрыть">{{ icon('cancel_24') }}</button>
+  </div>
+  <div class="stage" x-ref="stage" @pointerdown="down($event)" @pointermove="move($event)" @pointerup="up($event)" @pointercancel="up($event)"
+       @wheel.prevent="wheel($event)">
+    <div class="shot" x-ref="shot">
+      <img class="lo" x-ref="lo" :src="cur.preview || hi" alt="" draggable="false">
+      <img class="hi" :src="hi" alt="" draggable="false" :class="{ ready: loaded }" @load="loaded = true" @error="loaded = true">
+    </div>
+    <span class="spin" x-show="!loaded && slow" aria-hidden="true"></span>
+  </div>
+  <button type="button" class="ib nav prev" x-show="chrome && i > 0" @click="step(-1)" aria-label="Предыдущая">{{ icon('chevron_left_24') }}</button>
+  <button type="button" class="ib nav next" x-show="chrome && i < items.length - 1" @click="step(1)" aria-label="Следующая">{{ icon('chevron_right_24') }}</button>
+</div>
+<div class="im-player" x-data="player()" x-show="open" x-cloak @im-watch.window="show($event.detail)"
+     @keydown.escape.window="open && close()" @click.self="close()" @htmx:before-swap="if (!open) $event.detail.shouldSwap = false">
+  <div class="box" :class="{ round }">
+    <div class="bar"><span x-text="round ? 'Видеосообщение' : 'Видео'"></span>
+      <button type="button" class="ib" @click="close()" aria-label="Закрыть">{{ icon('cancel_24') }}</button></div>
+    <div id="player-slot" class="slot"></div>
+  </div>
+</div>

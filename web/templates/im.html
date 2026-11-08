@@ -1,5 +1,5 @@
 {% extends "base.html" %}
 {% block body_class %}page-im{% endblock %}
 {% block main_class %}im-shell{% endblock %}
-{% block nav %}{% include "partials/im_shell.html" %}{% endblock %}
+{% block nav %}{{ inline_svg('vk-icons.svg') }}{% include "partials/im_shell.html" %}{% endblock %}
 {% block body %}{% include "partials/im.html" %}{% endblock %}

@@ -11,9 +11,21 @@
 
 {$WEB_DOMAIN}:8080 {
 	tls internal
+	# без text/event-stream: сжатие копит поток событий в буфере, и сигнал о новом сообщении опаздывал бы
+	encode zstd gzip {
+		match {
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/javascript*
+			header Content-Type application/javascript*
+			header Content-Type application/json*
+			header Content-Type image/svg+xml*
+		}
+	}
 	reverse_proxy web:8080
-	header Cache-Control "no-store"
-	# статика отдаётся с ETag, браузер её ревалидирует, а не качает заново
+	# свой Cache-Control панели (файлы VK, поток событий) не перетирается
+	header ?Cache-Control "no-store"
+	# адрес статики содержит хеш файла: новая выкладка — новый адрес, старый можно хранить вечно
 	@static path /static/*
-	header @static Cache-Control "no-cache"
+	header @static Cache-Control "public, max-age=31536000, immutable"
 }

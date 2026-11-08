@@ -9,6 +9,7 @@ from web.auth import BLOCKED, LOGIN_PATH, WRONG_PASSWORD, Auth, NotLoggedIn, sam
 from web.config import Settings
 from web.humanize import clock, mmss, plural, short_since
 from web.im.live import Inbox
+from web.im.media import media_url
 from web.im.routes import create_router
 from web.im.views import peer_label, peer_link, presence, preview, wave_bars, when
 from web.render import Renderer
@@ -38,7 +39,7 @@ def create_app(settings: Settings, vk_factory=VkClient) -> FastAPI:
     app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
     render = Renderer(os.path.join(HERE, "templates"), os.path.join(HERE, "static"), peer_label=peer_label,
                       peer_link=peer_link, clock=clock, mmss=mmss, plural=plural, preview=preview, since=short_since,
-                      presence=presence, wave_bars=wave_bars, when=when)
+                      presence=presence, wave_bars=wave_bars, when=when, media_url=media_url)
     app.state.vk = None
 
     vk_lock = threading.Lock()

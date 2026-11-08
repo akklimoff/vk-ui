@@ -1,10 +1,10 @@
 {% from "partials/im_icons.html" import icon %}
-{% from "partials/im_media.html" import card %}
+{% from "partials/im_media.html" import card, shot, watch %}
 {# part: panel — панель целиком, tab — содержимое вкладки, page — следующая страница: плитки и сентинел #}
 {% macro media_page() %}
   {% for a in items %}
-    {% if type == 'photo' %}<a class="tile" href="{{ a.url }}" data-full="{{ a.url }}" target="_blank" rel="noopener" @click.prevent="view($el)"><img src="{{ a.preview }}" alt="фото" loading="lazy"></a>
-    {% elif type == 'video' %}{% set tag = 'a' if a.href else 'div' %}<{{ tag }} class="tile video-tile"{% if a.href %} href="{{ a.href }}" target="_blank" rel="noopener"{% endif %} title="{{ a.title }}">{% if a.preview %}<img src="{{ a.preview }}" alt="" loading="lazy">{% endif %}{% if a.duration %}<span class="dur">{{ a.duration|mmss }}</span>{% endif %}</{{ tag }}>
+    {% if type == 'photo' %}<a class="tile"{{ shot(a) }}><img src="{{ a.preview }}" alt="фото" loading="lazy"></a>
+    {% elif type == 'video' %}{% set tag = 'a' if a.ref or a.href else 'div' %}<{{ tag }} class="tile video-tile{{ ' round' if a.kind == 'video_message' }}"{% if a.ref %}{{ watch(a, a.href) }}{% elif a.href %} href="{{ a.href }}" target="_blank" rel="noopener"{% endif %} title="{{ a.title }}">{% if a.preview %}<img src="{{ a.preview }}" alt="" loading="lazy">{% endif %}{% if a.duration %}<span class="dur">{{ a.duration|mmss }}</span>{% endif %}</{{ tag }}>
     {% elif type == 'audio_message' %}{% set wid = 'mv' ~ (start or '0')|replace('/', '_')|replace(':', '_') ~ '-' ~ loop.index %}{% include "partials/im_voice.html" %}
     {% else %}{{ card(a) }}{% endif %}
   {% endfor %}

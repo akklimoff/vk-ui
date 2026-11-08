@@ -1,0 +1,4 @@
+{# плеер VK: приватное видео и кружки он показывает только тому, кто вошёл в VK в этом браузере #}
+{% if player %}<iframe src="{{ player ~ '&autoplay=1' }}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" referrerpolicy="origin"></iframe>{% endif %}
+<p class="hint">{% if player %}Пишет «Видео недоступно»? Встроенный плеер VK показывает такие видео только со входом в VK в этом браузере.{% else %}VK не отдал плеер для этого видео.{% endif %}
+  {% if back %}<a href="{{ back }}" target="_blank" rel="noopener">Открыть в VK</a>{% endif %}</p>

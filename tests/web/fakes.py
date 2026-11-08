@@ -17,6 +17,14 @@ class FakeVk:
         self.calls.append(("conversations", count, offset))
         return CONVERSATIONS
 
+    def changed_dialogs(self, peer_ids):
+        self.calls.append(("changed", tuple(peer_ids)))
+        return {**CONVERSATIONS, "items": [i for i in CONVERSATIONS["items"] if i["conversation"]["peer"]["id"] in peer_ids]}
+
+    def video_player(self, owner_id, video_id, access_key=""):
+        self.calls.append(("video", owner_id, video_id, access_key))
+        return f"https://vk.com/video_ext.php?oid={owner_id}&id={video_id}&hash=h"
+
     def history_page(self, peer_id, count, before_id=None):
         self.calls.append(("history", peer_id, count, before_id))
         return {**HISTORY, "items": SENT["items"] + HISTORY["items"]} if self.sent else HISTORY

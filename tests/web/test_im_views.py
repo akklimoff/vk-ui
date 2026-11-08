@@ -101,8 +101,9 @@ def test_other_vk_attachments_get_their_own_kind():
     assert call.title == "Видеозвонок" and call.subtitle == "1:15"
     assert attachment_of({"type": "call", "call": {"state": "canceled_by_receiver"}}).subtitle == "Отклонён"
     video = attachment_of({"type": "video", "video": {"id": 4, "owner_id": -1, "duration": 61, "title": "клип",
-                                                      "image": [{"url": "v1", "width": 130}, {"url": "v2", "width": 320}]}})
-    assert video.preview == "v2" and video.href == "https://vk.com/video-1_4" and video.duration == 61
+                                                      "image": [{"url": "https://cdn.example/v1", "width": 130},
+                                                                {"url": "https://cdn.example/v2", "width": 320}]}})
+    assert video.preview == "https://cdn.example/v2" and video.ref == "-1_4" and video.href == "https://vk.com/video-1_4" and video.duration == 61
     doc = attachment_of({"type": "doc", "doc": {"title": "отчёт.pdf", "ext": "pdf", "size": 2_500_000,
                                                 "url": "https://vk.com/doc1_2"}})
     assert doc.href == "https://vk.com/doc1_2" and doc.subtitle == "PDF · 2.4 МБ"

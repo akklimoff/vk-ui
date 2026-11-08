@@ -30,7 +30,7 @@ def test_im_page_with_sel_renders_chat(client):
     assert r.status_code == 200
     assert "ну все тогда" in r.text and "после смены выкину." in r.text
     assert "23 участника" in r.text
-    assert 'voice("https://cdn.example/v.mp3", 20)' in r.text and "0:20" in r.text
+    assert 'voice("/im/media?u=https%3A%2F%2Fcdn.example%2Fv.mp3", 20)' in r.text and "0:20" in r.text
     assert "после смены выкину</" in r.text          # расшифровка голосового
     assert "пригласил(а) Аня Иванова" in r.text
     assert 'src="https://cdn.example/st256.png"' in r.text
@@ -70,11 +70,11 @@ def test_older_page_replaces_sentinel(client):
 
 
 def test_full_page_keeps_sentinel_on_oldest(client):
-    full = {**HISTORY, "items": [{**HISTORY["items"][1], "id": 600 - i} for i in range(40)]}
+    full = {**HISTORY, "items": [{**HISTORY["items"][1], "id": 600 - i} for i in range(50)]}
     client.app.state.vk = FakeVk("t")
     client.app.state.vk.history_page = lambda *a, **k: full
     r = client.get(f"/im/{PEER_CHAT}/messages?before=600", auth=AUTH, headers={"HX-Request": "true"})
-    assert 'class="im-more"' in r.text and "before=561" in r.text
+    assert 'class="im-more"' in r.text and "before=551" in r.text
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
     assert 'class="im-more"' in r.text
 
@@ -243,9 +243,12 @@ def test_photo_opens_in_viewer(client):
     client.app.state.vk = FakeVk("t")
     client.app.state.vk.history_page = lambda *a, **k: {**HISTORY, "items": [photo] + HISTORY["items"]}
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
-    assert 'data-full="https://cdn.example/p_w.jpg" target="_blank" rel="noopener" @click.prevent="view($el)"' in r.text
+    assert 'data-full="https://cdn.example/p_w.jpg"' in r.text and '@click.prevent="view($el)"' in r.text
+    assert """data-sizes='[[604, "https://cdn.example/p_x.jpg"], [1280, "https://cdn.example/p_w.jpg"]]'""" in r.text
+    assert 'data-save="/im/media?u=https%3A%2F%2Fcdn.example%2Fp_w.jpg&amp;name=' in r.text
     assert 'src="https://cdn.example/p_x.jpg" width="320" height="320"' in r.text   # у фикстуры нет высоты — квадрат
     assert 'class="im-viewer"' in r.text and 'id="messages" class="im-messages" x-ref="list" data-gallery' in r.text
+    assert 'class="im-scroll"' in r.text
 
 
 def test_forwarded_messages_and_reposts_render_inline(client):
@@ -287,10 +290,11 @@ def test_media_panel_has_tabs_and_pages_on(client):
     assert client.get(f"/im/{PEER_CHAT}/media", auth=AUTH).status_code == 303
 
 
-def test_icon_sprite_url_carries_its_version(client):
+def test_icon_sprite_is_inlined_into_the_page(client):
     r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
-    assert re.search(r'href="/static/vk-icons\.svg\?v=\d+#send_24"', r.text)
-    assert "/static/vk-icons.svg#" not in r.text
+    assert '<use href="#send_24"/>' in r.text and '<symbol id="send_24"' in r.text
+    assert "/static/vk-icons.svg" not in r.text
+    assert r.text.count("<symbol id=") == len(re.findall(r'<symbol id=', open("web/static/vk-icons.svg").read()))
 
 
 def test_chat_header_toggles_the_media_panel(client):
@@ -350,9 +354,8 @@ def test_unchanged_dialog_list_answers_204(client):
     version = first.headers["X-Dialogs-Version"]
     again = client.get(f"/im/dialogs?count=2&v={version}", auth=AUTH, headers=hx)
     assert again.status_code == 204
-    assert ("conversations", 2 + len(NEVER_SHOWN), 0) in client.app.state.vk.calls
+    assert [c for c in client.app.state.vk.calls if c[0] == "conversations"] == [("conversations", 2 + len(NEVER_SHOWN), 0)]
     assert client.get("/im/dialogs?count=5000", auth=AUTH, headers=hx).status_code == 200
-    assert ("conversations", 200, 0) in client.app.state.vk.calls
 
 
 def chats(total):
@@ -424,18 +427,18 @@ def test_the_official_vk_account_never_shows(client):
         assert client.get(url, auth=AUTH, headers=hx).status_code == 404, url
 
 
-def test_the_archive_is_asked_once_per_list_and_cached_for_chats(client):
+def test_the_archive_is_cached_for_lists_and_chats(client):
     hx = {"HX-Request": "true"}
     client.get("/im/dialogs", auth=AUTH, headers=hx)
     client.get("/im/dialogs", auth=AUTH, headers=hx)
     for _ in range(3):
         client.get(f"/im/{PEER_CHAT}/messages?after=502", auth=AUTH, headers=hx)
-    assert client.app.state.vk.calls.count(("archive",)) == 2
+    assert client.app.state.vk.calls.count(("archive",)) == 1
 
 
 def test_search_reaches_chats_beyond_the_loaded_list(client):
     r = client.get("/im/dialogs/search?q=аня", auth=AUTH, headers={"HX-Request": "true"})
-    assert "Аня Иванова" in r.text and 'data-peer="22"' in r.text and 'x-show="true"' in r.text
+    assert "Аня Иванова" in r.text and 'data-peer="22"' in r.text and "data-found" in r.text
     assert ("search", "аня", 20) in client.app.state.vk.calls
     empty = client.get("/im/dialogs/search?q=", auth=AUTH, headers={"HX-Request": "true"})
     assert empty.status_code == 200 and "data-peer" not in empty.text
@@ -460,13 +463,14 @@ def test_hovered_chat_opens_from_the_warmed_history(client):
     client.get(f"/im/{PEER_CHAT}", auth=AUTH, headers={"HX-Request": "true"})
     client.get(f"/im/{PEER_CHAT}", auth=AUTH, headers={"HX-Request": "true"})
     fetched = [c for c in client.app.state.vk.calls if c[0] == "history"]
-    assert len(fetched) == 2          # прогрев и второе открытие; первое открытие взяло прогретое
+    assert len(fetched) == 1          # оба открытия взяли прогретое: long poll не видел в чате нового
 
 
 def test_more_dialogs_stop_at_the_cap(client):
     hx = {"HX-Request": "true"}
     client.get("/im/dialogs/more?offset=180", auth=AUTH, headers=hx)
-    assert ("conversations", 20 + len(NEVER_SHOWN), 180) in client.app.state.vk.calls
+    asked = [c for c in client.app.state.vk.calls if c[0] == "conversations"]
+    assert asked and all(count + offset <= 200 + len(NEVER_SHOWN) for _, count, offset in asked)
     r = client.get("/im/dialogs/more?offset=200", auth=AUTH, headers=hx)
     assert r.status_code == 200 and "dlg" not in r.text
     assert not [c for c in client.app.state.vk.calls if c[0] == "conversations" and c[2] == 200]
@@ -494,3 +498,62 @@ def test_voice_with_photos_is_refused_before_any_upload(client):
     assert r.status_code == 422 and "без фото" in r.text
     vk = client.app.state.vk
     assert vk is None or not [c for c in vk.calls if c[0] in ("photos", "voice", "send")]
+
+
+ROUND = {"id": 610, "date": 1788876300, "peer_id": PEER_CHAT, "from_id": 11, "out": 0, "text": "",
+         "attachments": [{"type": "video", "video": {"id": 9, "owner_id": 11, "access_key": "ab12", "type": "video_message",
+                                                       "duration": 14, "first_frame": [{"url": "https://cdn.example/f.jpg",
+                                                                                        "width": 480, "height": 480}]}}]}
+
+
+def test_video_message_is_a_circle_that_opens_the_vk_player(client):
+    client.app.state.vk = FakeVk("t")
+    client.app.state.vk.history_page = lambda *a, **k: {**HISTORY, "items": [ROUND] + HISTORY["items"]}
+    r = client.get(f"/im?sel={PEER_CHAT}", auth=AUTH)
+    assert 'class="circle"' in r.text and 'hx-get="/im/video/11_9_ab12?back=' in r.text
+    assert 'src="https://cdn.example/f.jpg" width="240" height="240"' in r.text and "0:14" in r.text
+    assert "msgid%3D610" in r.text                    # «Открыть в VK» ведёт к самому сообщению
+    assert 'class="im-player"' in r.text and 'id="player-slot"' in r.text
+
+
+def test_video_player_comes_from_vk_and_only_for_htmx(client):
+    hx = {"HX-Request": "true"}
+    r = client.get("/im/video/11_9_ab12?back=https://vk.com/im?sel=1", auth=AUTH, headers=hx)
+    assert r.status_code == 200 and '<iframe src="https://vk.com/video_ext.php?oid=11&amp;id=9&amp;hash=h&amp;autoplay=1"' in r.text
+    assert 'href="https://vk.com/im?sel=1"' in r.text
+    assert ("video", 11, 9, "ab12") in client.app.state.vk.calls
+    client.get("/im/video/11_9_ab12", auth=AUTH, headers=hx)
+    assert len([c for c in client.app.state.vk.calls if c[0] == "video"]) == 1
+    assert client.get("/im/video/11_9_ab12", auth=AUTH).status_code == 404
+    assert client.get("/im/video/11_9_zz;rm", auth=AUTH, headers=hx).status_code == 404
+
+
+def test_a_player_from_a_foreign_host_is_not_embedded(client):
+    client.get("/im", auth=AUTH)
+    client.app.state.vk.video_player = lambda *a: "https://evil.example/player"
+    r = client.get("/im/video/1_2", auth=AUTH, headers={"HX-Request": "true"})
+    assert "<iframe" not in r.text and "VK не отдал плеер" in r.text
+
+
+def test_reading_a_chat_refreshes_its_cached_history(client):
+    hx = {"HX-Request": "true"}
+    client.get(f"/im/{PEER_CHAT}", auth=AUTH, headers=hx)
+    client.post(f"/im/{PEER_CHAT}/read", auth=AUTH, headers=hx)
+    client.get(f"/im/{PEER_CHAT}", auth=AUTH, headers=hx)
+    assert len([c for c in client.app.state.vk.calls if c[0] == "history"]) == 2
+
+
+def test_a_long_poll_change_updates_only_that_dialog(client):
+    hx = {"HX-Request": "true"}
+    client.get("/im/dialogs?count=2", auth=AUTH, headers=hx)
+    client.app.state.inbox.changed([PEER_USER])
+    client.get("/im/dialogs?count=2", auth=AUTH, headers=hx)
+    asked = [c for c in client.app.state.vk.calls if c[0] in ("conversations", "changed")]
+    assert asked == [("conversations", 2 + len(NEVER_SHOWN), 0), ("changed", (PEER_USER,))]
+
+
+def test_dialog_rows_carry_their_time_for_the_browser_clock(client):
+    r = client.get("/im", auth=AUTH)
+    assert re.search(r'<time data-ts="1788872640">[^<]+</time>', r.text)
+    assert 'data-tz="' in r.text and re.search(r'data-now="\d+"', r.text)
+    assert "x-show" not in r.text.split('id="dialog-list"')[1].split("</ul>")[0]

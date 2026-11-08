@@ -36,7 +36,7 @@ SERIES_GAP = 300.0
 MONTHS = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
           "сентября", "октября", "ноября", "декабря")
 PREVIEW_LABELS = {"photo": "Фотография", "sticker": "Стикер", "voice": "Голосовое сообщение",
-                  "doc": "Документ", "video": "Видео", "audio": "Аудиозапись", "link": "Ссылка",
+                  "doc": "Документ", "video": "Видео", "video_message": "Видеосообщение", "audio": "Аудиозапись", "link": "Ссылка",
                   "wall": "Запись на стене", "wall_reply": "Комментарий", "story": "История",
                   "gift": "Подарок", "poll": "Опрос", "call": "Звонок", "market": "Товар", "article": "Статья",
                   "audio_playlist": "Плейлист", "graffiti": "Граффити", "money": "Денежный перевод",
@@ -44,6 +44,9 @@ PREVIEW_LABELS = {"photo": "Фотография", "sticker": "Стикер", "v
 CALL_STATES = {"canceled_by_initiator": "Отменён", "canceled_by_receiver": "Отклонён", "busy": "Занято"}
 PHOTO_PREVIEW = 600
 PHOTO_TILE = 300
+# просмотрщик выбирает из этих размеров под ширину экрана: меньшие мылят даже на телефоне
+VIEWER_MIN_WIDTH = 500
+CIRCLE = 240
 
 
 def is_chat(peer_id: int) -> bool:
@@ -54,9 +57,9 @@ def peer_label(peer_id: int) -> str:
     return f"беседа {peer_id - GROUP_CHAT_PEER_BASE}" if is_chat(peer_id) else f"id{peer_id}"
 
 
-def peer_link(peer_id: int) -> str:
+def peer_link(peer_id: int, message_id: int | None = None) -> str:
     sel = f"c{peer_id - GROUP_CHAT_PEER_BASE}" if is_chat(peer_id) else str(peer_id)
-    return f"https://vk.com/im?sel={sel}"
+    return f"https://vk.com/im?sel={sel}" + (f"&msgid={message_id}" if message_id else "")
 
 
 @dataclass(frozen=True)
@@ -86,6 +89,8 @@ class Attachment:
     href: str = ""
     lines: tuple[str, ...] = ()
     post: "Post | None" = None
+    sizes: tuple[tuple[int, str], ...] = ()
+    ref: str = ""
 
     def fit(self, box: int) -> tuple[int, int]:
         """Размер превью в рамке box×box: заранее известный размер не даёт ленте прыгать, пока картинка грузится."""
@@ -229,12 +234,39 @@ def post_of(body: dict, profiles: "Profiles") -> Post:
                 original=post_of(history[0], profiles) if history else None)
 
 
+def viewer_sizes(sizes: list) -> tuple[tuple[int, str], ...]:
+    by_width = {}
+    for s in sizes or []:
+        url, width = web_link(s.get("url")), int(s.get("width") or 0)
+        if url and width:
+            by_width[width] = url
+    widths = sorted(by_width)
+    chosen = [w for w in widths if w >= VIEWER_MIN_WIDTH] or widths[-1:]
+    return tuple((w, by_width[w]) for w in chosen)
+
+
 def photo_of(body: dict, at_least: int = PHOTO_PREVIEW) -> Attachment:
     full = web_link(best_size(body.get("sizes"), 10 ** 6)[0])
     preview, width, height = best_size(body.get("sizes"), at_least)
     if not full:
         return Attachment("photo", title="Фотография")
-    return Attachment("photo", url=full, preview=web_link(preview) or full, width=width, height=height)
+    return Attachment("photo", url=full, preview=web_link(preview) or full, width=width, height=height,
+                      sizes=viewer_sizes(body.get("sizes")))
+
+
+def video_of(body: dict) -> Attachment:
+    owner, vid, key = body.get("owner_id"), body.get("id"), body.get("access_key")
+    ref = f"{owner}_{vid}" + (f"_{key}" if key else "") if owner and vid else ""
+    duration = int(body.get("duration") or 0)
+    if body.get("type") == "video_message":
+        preview, _, _ = best_size(body.get("first_frame") or body.get("image"), CIRCLE)
+        return Attachment("video_message", preview=web_link(preview), width=CIRCLE, height=CIRCLE, duration=duration,
+                          title="Видеосообщение", ref=ref)
+    preview, width, height = best_size(body.get("image") or body.get("first_frame"), 320)
+    clip = body.get("type") == "short_video"
+    href = (f"https://vk.com/clip{owner}_{vid}" if clip else f"https://vk.com/video{owner}_{vid}") if ref else ""
+    return Attachment("video", preview=web_link(preview), width=width, height=height,
+                      title=body.get("title") or ("клип" if clip else "видео"), duration=duration, href=href, ref=ref)
 
 
 def attachment_of(att: dict, profiles: "Profiles | None" = None) -> Attachment:
@@ -272,11 +304,7 @@ def parse_attachment(att: dict, profiles: "Profiles") -> Attachment:
                           title=body.get("title") or "документ", subtitle=details, preview=web_link(preview),
                           width=width, height=height)
     if kind == "video":
-        preview, width, height = best_size(body.get("image"), 320)
-        owner, vid = body.get("owner_id"), body.get("id")
-        return Attachment("video", preview=preview, width=width, height=height, title=body.get("title") or "видео",
-                          duration=int(body.get("duration") or 0),
-                          href=f"https://vk.com/video{owner}_{vid}" if owner and vid else "")
+        return video_of(body)
     if kind == "audio":
         return Attachment("audio", title=body.get("title") or "аудиозапись", subtitle=body.get("artist") or "",
                           duration=int(body.get("duration") or 0))
