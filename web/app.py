@@ -1,3 +1,5 @@
+import copy
+import logging
 import os
 import threading
 
@@ -17,6 +19,30 @@ from web.vk import VkClient
 
 HERE = os.path.dirname(__file__)
 REDACTED = "[скрыто]"
+PRIVATE_PATHS = ("/im/media", "/im/video/")
+
+
+class HidePrivatePaths(logging.Filter):
+    """Адреса файлов VK в /im/media и ключи видео в /im/video — ссылки на личные голосовые, фото и кружки:
+    в журнал доступа uvicorn они не попадают."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        # формат uvicorn.access: (адрес клиента, метод, путь с query, версия HTTP, статус)
+        if isinstance(args, tuple) and len(args) == 5 and isinstance(args[2], str):
+            for prefix in PRIVATE_PATHS:
+                if args[2].startswith(prefix):
+                    record.args = (args[0], args[1], prefix + REDACTED, args[3], args[4])
+        return True
+
+
+def log_config() -> dict:
+    from uvicorn.config import LOGGING_CONFIG
+
+    config = copy.deepcopy(LOGGING_CONFIG)
+    config.setdefault("filters", {})["private_paths"] = {"()": HidePrivatePaths}
+    config["handlers"]["access"]["filters"] = ["private_paths"]
+    return config
 
 
 def create_app(settings: Settings, vk_factory=VkClient) -> FastAPI:
@@ -96,7 +122,7 @@ def main() -> None:
     # порт панели наружу не публикуется, до uvicorn доходит только Caddy — его X-Forwarded-For можно доверять
     settings = Settings()
     uvicorn.run(create_app(settings), host=settings.web_host, port=8080,
-                proxy_headers=True, forwarded_allow_ips="*")
+                proxy_headers=True, forwarded_allow_ips="*", log_config=log_config())
 
 
 if __name__ == "__main__":

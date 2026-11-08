@@ -98,3 +98,21 @@ def test_media_is_served_only_to_the_panel_itself(client):
 def test_foreign_addresses_are_not_proxied(client):
     assert client.get("/im/media", params={"u": "https://evil.example/x"}, auth=AUTH).status_code == 404
     assert client.get("/im/media", params={"u": VOICE}, auth=None).status_code in (302, 303, 401)
+
+
+def test_access_log_hides_vk_file_addresses():
+    import logging
+    import logging.config
+
+    from web.app import log_config
+
+    config = log_config()
+    logging.config.dictConfig(config)
+    handler = logging.getLogger("uvicorn.access").handlers[0]
+    record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
+                               ("1.2.3.4:5", "GET", f"/im/media?u={VOICE}", "1.1", 206), None)
+    assert all(f.filter(record) for f in handler.filters)
+    assert "userapi" not in record.getMessage() and "/im/media" in record.getMessage()
+    record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
+                               ("1.2.3.4:5", "GET", "/im/2000000001", "1.1", 200), None)
+    assert all(f.filter(record) for f in handler.filters) and "/im/2000000001" in record.getMessage()
